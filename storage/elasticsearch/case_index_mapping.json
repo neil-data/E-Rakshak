@@ -1,0 +1,45 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "ioc_analyzer": {
+          "type": "custom",
+          "tokenizer": "keyword",
+          "filter": ["lowercase"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "sample_id":         { "type": "keyword" },
+      "platform":          { "type": "keyword" },
+      "file_type":         { "type": "keyword" },
+      "risk_score":        { "type": "integer" },
+      "status":            { "type": "keyword" },
+
+      "narrative_summary": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "keyword": { "type": "keyword", "ignore_above": 256 }
+        }
+      },
+
+      "mitre_technique_ids": { "type": "keyword" },
+      "capability_tags":     { "type": "keyword" },
+
+      "ioc_ips":     { "type": "ip" },
+      "ioc_domains": { "type": "text", "analyzer": "ioc_analyzer" },
+      "ioc_urls":    { "type": "text", "analyzer": "ioc_analyzer" },
+
+      "triage_flagged":    { "type": "boolean" },
+      "triage_category":   { "type": "keyword" },
+
+      "submitted_at": { "type": "date" },
+      "analyzed_at":  { "type": "date" }
+    }
+  }
+}

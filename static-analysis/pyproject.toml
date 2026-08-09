@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "static-analysis-engine"
+version = "1.0.0"
+description = "Cross-platform malware static analysis engine (APK, PE, ELF, Mach-O)."
+requires-python = ">=3.11"
+
+# The engine has no required third-party dependencies: it must run in an
+# air-gapped detonation plane where installing anything is a deliberate act.
+dependencies = []
+
+[project.optional-dependencies]
+# YARA is optional and its absence is reported rather than hidden — a scan
+# that did not run must never look like a scan that found nothing.
+signatures = ["yara-python>=4.3"]
+test = ["pytest>=8"]
+
+[project.scripts]
+static-analysis = "static_analysis.entrypoint:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

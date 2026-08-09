@@ -1,0 +1,40 @@
+{
+  "_comment": "PROPOSED shape for dynamic-analysis output, matching what CAPE + network capture will produce in Week 3. Confirm with Member 2 once the sandbox is live.",
+
+  "sample_id": "a3f9c2b1e4d5f6a7b8c9d0e1f2a3b4c5",
+
+  "process_tree": [
+    {"pid": 1, "name": "app_process", "children": [2]},
+    {"pid": 2, "name": "com.quickloan.easyapp", "children": [3]},
+    {"pid": 3, "name": "SmsReceiver$Worker", "children": []}
+  ],
+
+  "api_calls": [
+    "SmsManager.getAllMessagesFromIcc",
+    "ContentResolver.query(content://sms/inbox)",
+    "HttpURLConnection.connect",
+    "LocationManager.requestLocationUpdates",
+    "DevicePolicyManager.isAdminActive"
+  ],
+
+  "network_connections": [
+    {
+      "dest_ip": "185.220.101.45",
+      "dest_port": 443,
+      "protocol": "https",
+      "bytes_sent": 18420,
+      "interval_seconds": 40,
+      "flagged_c2": true
+    }
+  ],
+
+  "files_written": [
+    "/data/data/com.quickloan.easyapp/shared_prefs/sms_cache.xml"
+  ],
+
+  "registry_changes": [],
+
+  "c2_endpoints_detected": [
+    "185.220.101.45:443"
+  ]
+}

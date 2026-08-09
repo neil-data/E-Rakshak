@@ -1,0 +1,6 @@
+
+[signatures]
+yara-python>=4.3
+
+[test]
+pytest>=8

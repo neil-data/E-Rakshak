@@ -1,0 +1,18 @@
+{
+  "python.analysis.exclude": [
+    "**/venv/**",
+    "**/node_modules/**",
+    "**/__pycache__/**"
+  ],
+  "python.analysis.ignore": [
+    "**/venv/**"
+  ],
+  "files.watcherExclude": {
+    "**/venv/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/venv": true,
+    "**/node_modules": true
+  }
+}

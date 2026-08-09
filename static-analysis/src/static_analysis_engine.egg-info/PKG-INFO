@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: static-analysis-engine
+Version: 1.0.0
+Summary: Cross-platform malware static analysis engine (APK, PE, ELF, Mach-O).
+Requires-Python: >=3.11
+Provides-Extra: signatures
+Requires-Dist: yara-python>=4.3; extra == "signatures"
+Provides-Extra: test
+Requires-Dist: pytest>=8; extra == "test"

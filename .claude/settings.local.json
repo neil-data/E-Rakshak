@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest dynamic-sandbox/hooks/ -q)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest dynamic-sandbox/hooks/test_phase6_android_pipeline.py -q)",
+      "Bash(timeout 600 python -m pytest -q)",
+      "Bash(timeout 300 python -m pytest backend/tests/test_live_monitoring.py -q)",
+      "Bash(timeout 300 python -m pytest dynamic-sandbox/stages/test_stages.py -q)",
+      "Bash(timeout 300 python -m pytest dynamic-sandbox/stages/test_stages.py::TestReporting::test_markdown_renders -q)",
+      "Bash(python -c \"import hooks; print\\(len\\(hooks.ANDROID_MONITORED_APIS\\), 'android APIs exported'\\)\")",
+      "Bash(xargs wc -l)",
+      "Bash(python -c \"import yara\")",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(timeout 180 pip install yara-python)",
+      "Bash(python -m pytest static-analysis/tests -q)",
+      "Bash(python -m pytest static-analysis/tests/test_ioc_extraction.py -q)",
+      "Bash(python -m pytest static-analysis/tests/test_entropy_analysis.py -q)",
+      "Bash(python -m pytest static-analysis/tests/test_yara_detection.py -q)",
+      "Bash(python -m pytest static-analysis/tests/test_classification.py -q)",
+      "Bash(python -m pytest static-analysis/tests/test_storage_and_pipeline.py -q)",
+      "Bash(python -)",
+      "Bash(python -m pytest static-analysis/tests/test_container_scanning.py -q)",
+      "Bash(python -m pytest static-analysis/tests dynamic-sandbox/hooks -q)",
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pytest dynamic-sandbox/manager -q)",
+      "Bash(timeout 180 pip install pytest-asyncio)",
+      "Bash(python -m pytest dynamic-sandbox/artifacts -q)",
+      "Bash(python -m pytest dynamic-sandbox/timeline -q)",
+      "Bash(timeout 300 python -m pytest dynamic-sandbox/manager/test_integration.py -q)",
+      "Bash(timeout 600 python -m pytest dynamic-sandbox -q)",
+      "Bash(timeout 200 python -m pytest \"dynamic-sandbox/stages/test_stages.py::TestTimingSafety::test_short_budgets_do_not_time_out\" -q)",
+      "Bash(timeout 200 python -c ' *)",
+      "Bash(timeout 300 python -m pytest dynamic-sandbox/stages -q)",
+      "Bash(timeout 200 python -m pytest dynamic-sandbox/stages/test_monitors.py -q)",
+      "Bash(timeout 400 python -m pytest dynamic-sandbox/stages dynamic-sandbox/manager -q)",
+      "Bash(timeout 400 python -m pytest dynamic-sandbox/stages -q)"
+    ]
+  }
+}

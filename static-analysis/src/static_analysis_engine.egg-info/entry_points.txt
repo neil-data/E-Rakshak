@@ -1,0 +1,2 @@
+[console_scripts]
+static-analysis = static_analysis.entrypoint:main

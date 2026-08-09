@@ -1,0 +1,49 @@
+{
+  "sample_id": "a3f9c2b1e4d5f6a7b8c9d0e1f2a3b4c5",
+  "sha256": "a3f9c2b1e4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
+  "platform": "android",
+  "file_type": "apk",
+  "file_size_bytes": 4821376,
+  "submitted_at": "2026-07-11T10:15:00Z",
+  "hash_reputation": {
+    "vt_matches": 0,
+    "known_family": null,
+    "first_seen_public": null
+  },
+  "yara_matches": [
+    {
+      "rule_name": "india_scam_sms_permission_overlay",
+      "category": "india_scam_rules",
+      "severity": "high",
+      "description": "Requests SMS read + overlay draw permissions together, common in loan-app OTP theft pattern"
+    }
+  ],
+  "android_manifest": {
+    "package_name": "com.quickloan.easyapp",
+    "permissions": [
+      "android.permission.READ_SMS",
+      "android.permission.RECEIVE_SMS",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.READ_CONTACTS",
+      "android.permission.ACCESS_FINE_LOCATION"
+    ],
+    "requested_sdk": 33,
+    "exported_components": ["com.quickloan.easyapp.SmsReceiver"]
+  },
+  "pe_analysis": null,
+  "extracted_strings": {
+    "urls": ["http://185.220.101.45/api/collect"],
+    "ips": ["185.220.101.45"],
+    "suspicious_keywords": ["sms_forward", "otp_capture", "device_admin"]
+  },
+  "ml_classifier": {
+    "model": "isolation_forest_v1",
+    "anomaly_score": 0.87,
+    "classification": "likely_malicious"
+  },
+  "static_risk_flags": [
+    "requests_sms_and_overlay_together",
+    "hardcoded_c2_ip",
+    "matches_india_scam_yara_rule"
+  ]
+}

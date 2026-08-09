@@ -1,0 +1,72 @@
+{
+  "nav": {
+    "home": "Home",
+    "pipeline": "Pipeline",
+    "features": "Features",
+    "technology": "Technology",
+    "architecture": "Architecture",
+    "about": "About",
+    "launchConsole": "Launch Console"
+  },
+  "login": {
+    "backToLanding": "Back to Landing",
+    "portalGateway": "Investigation Portal Gateway",
+    "title": "Log in to SentinelScan",
+    "subtitle": "Use your secure agency-provided credentials to access the sandbox terminal.",
+    "emailLabel": "Official Email",
+    "passwordLabel": "Security Password",
+    "show": "Show",
+    "hide": "Hide",
+    "rememberMe": "Remember active token",
+    "forgotPassword": "Forgot Password?",
+    "submit": "Establish Terminal Session",
+    "submitting": "Authenticating...",
+    "warning": "Authorized personnel only. All activities, uploads, and queries are trace-logged under national cybersecurity policy.",
+    "missingCredentials": "Please supply both agency credentials."
+  },
+  "dashboard": {
+    "brand": "SentinelScan",
+    "nav": {
+      "overview": "Overview Summary",
+      "upload": "Ingest Artifact",
+      "static": "Static Code Analyst",
+      "dynamic": "Detonation Sandbox",
+      "behavior": "Behavior Timeline",
+      "mitre": "MITRE Mapping Matrix",
+      "reports": "AI Report Dossier",
+      "cases": "Database Registry",
+      "settings": "Settings Desk"
+    },
+    "modules": "Core Forensics Modules",
+    "activeTarget": "Active Target",
+    "sandboxOnline": "Sandbox Online",
+    "sandboxOffline": "Sandbox Offline — Static Analysis Only",
+    "sessionActive": "Session Active",
+    "verified": "Verified",
+    "authError": "Auth Error",
+    "loadingOperator": "Loading operator...",
+    "operatorUnavailable": "Operator unavailable",
+    "unknownOperator": "Unknown operator",
+    "fetchingIdentity": "Fetching identity...",
+    "roleUnknown": "Role Unknown",
+    "logout": "Terminate Session",
+    "settings": {
+      "title": "Cyber Enclave Settings & Policy Desk",
+      "subtitle": "Configure default Guest VM target execution loops, air-gap policy triggers, and dynamic honeypot loopbacks.",
+      "hypervisorConfig": "Hypervisor Guest configuration",
+      "vmGuestOs": "Default VM Guest OS",
+      "detonationWindow": "Detonation Time Window Limit",
+      "securityPolicy": "Security & Air-Gapping Policy",
+      "strictAirGap": "Strict Air-Gapped Sandboxing",
+      "strictAirGapDesc": "Force-block real outgoing socket communication. Virtualized endpoints will communicate exclusively with the fake honeypot loopback mock adapter.",
+      "autoMitre": "Automated MITRE Matrix Submission",
+      "autoMitreDesc": "Auto-align intercepted logs against tactics definitions, flagging suspect modules instantly.",
+      "lockSettings": "Lock Sandbox Settings"
+    }
+  },
+  "language": {
+    "english": "English",
+    "gujarati": "Gujarati",
+    "disclosure": "Gujarati text is machine-translated — have a native speaker review before formal use."
+  }
+}

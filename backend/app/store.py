@@ -1,0 +1,247 @@
+"""
+backend/app/store.py — Case persistence layer.
+
+Backed by Postgres (see db.py) whenever DATABASE_URL is reachable; falls
+back automatically to the original in-memory dict otherwise, so the API
+stays fully functional without Docker for local dev/demo — the same
+graceful-degradation pattern used elsewhere in this codebase for Redis
+(ingestion/gateway.py), Groq (agents/narrative_agent/narrative.py), and upx
+(static-analysis packing/unpacker.py).
+
+Every Postgres-backed save also appends a hash-chained `chain_of_custody`
+row, exactly per the algorithm documented in storage/postgres/schema.sql:
+each row's `row_hash` is sha256(sample_id + event_type + event_detail +
+prev_hash + timestamp), and `prev_hash` links back to the previous row for
+that sample_id — a tamper-evident audit trail, not just a claim in the
+README.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from datetime import datetime, timezone
+from threading import Lock
+from typing import Optional
+
+from sqlalchemy import text
+
+from . import db
+from . import search
+
+_LOGGER = logging.getLogger(__name__)
+
+# In-memory fallback — used automatically whenever db.is_available() is False,
+# and also as a best-effort cache/fallback if an individual Postgres call fails.
+_store: dict[str, dict] = {}
+_lock = Lock()
+
+
+def _chain_hash(sample_id: str, event_type: str, event_detail: str, prev_hash: Optional[str], timestamp: str) -> str:
+    payload = f"{sample_id}{event_type}{event_detail}{prev_hash or ''}{timestamp}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def _append_chain_of_custody(conn, sample_id: str, event_type: str, event_detail: str) -> None:
+    result = await conn.execute(
+        text('SELECT row_hash FROM chain_of_custody WHERE sample_id = :sid ORDER BY id DESC LIMIT 1'),
+        {"sid": sample_id},
+    )
+    row = result.first()
+    prev_hash = row[0] if row else None
+    timestamp = datetime.now(timezone.utc).isoformat()
+    row_hash = _chain_hash(sample_id, event_type, event_detail, prev_hash, timestamp)
+    await conn.execute(
+        text(
+            'INSERT INTO chain_of_custody (sample_id, event_type, event_detail, prev_hash, row_hash, "timestamp") '
+            'VALUES (:sid, :etype, :edetail, :prev, :rhash, :ts)'
+        ),
+        {"sid": sample_id, "etype": event_type, "edetail": event_detail, "prev": prev_hash, "rhash": row_hash, "ts": timestamp},
+    )
+
+
+def _jsonb(value) -> list | dict:
+    if isinstance(value, str):
+        return json.loads(value)
+    return value if value is not None else []
+
+
+def _row_to_case(case_row, mitre_rows, cap_rows) -> dict:
+    submitted_at = case_row["submitted_at"]
+    raw_findings = _jsonb(case_row["raw_findings"]) if "raw_findings" in case_row.keys() else {}
+    if not isinstance(raw_findings, dict):
+        raw_findings = {}
+    return {
+        "sample_id": case_row["sample_id"],
+        "platform": case_row["platform"],
+        "file_type": case_row["file_type"],
+        "file_size_bytes": case_row["file_size_bytes"],
+        "risk_score": case_row["risk_score"],
+        "status": case_row["status"],
+        "narrative_summary": case_row["narrative_summary"] or "",
+        "submitted_at": submitted_at.isoformat() if hasattr(submitted_at, "isoformat") else submitted_at,
+        "sha256": case_row["sha256"] if "sha256" in case_row.keys() else None,
+        "md5": case_row["md5"] if "md5" in case_row.keys() else None,
+        "sha1": case_row["sha1"] if "sha1" in case_row.keys() else None,
+        "yara_matches": raw_findings.get("yara_matches", []),
+        "packing": raw_findings.get("packing"),
+        "explained_strings": raw_findings.get("explained_strings", []),
+        "geo_iocs": raw_findings.get("geo_iocs", []),
+        "mitre_techniques": [
+            {"technique_id": r["technique_id"], "technique_name": r["technique_name"], "confidence": float(r["confidence"])}
+            for r in mitre_rows
+        ],
+        "capability_tags": [
+            {
+                "capability": r["capability"],
+                "confidence": float(r["confidence"]),
+                "evidence": json.loads(r["evidence"]) if isinstance(r["evidence"], str) else (r["evidence"] or []),
+            }
+            for r in cap_rows
+        ],
+    }
+
+
+async def save_case(sample_id: str, case_data: dict, event_type: str = "static_analysis_complete") -> None:
+    """Persist a case plus its MITRE/capability children and a chain-of-custody entry."""
+    with _lock:
+        _store[sample_id] = case_data  # kept warm regardless — cheap, and the automatic read fallback below relies on it
+
+    await search.index_case(case_data)  # best-effort; no-ops cleanly if Elasticsearch is unavailable
+
+    if not db.is_available():
+        return
+
+    try:
+        engine = db.get_engine()
+        async with engine.begin() as conn:
+            raw_findings = json.dumps({
+                "yara_matches": case_data.get("yara_matches", []),
+                "packing": case_data.get("packing"),
+                "explained_strings": case_data.get("explained_strings", []),
+                "geo_iocs": case_data.get("geo_iocs", []),
+            })
+            await conn.execute(
+                text(
+                    "INSERT INTO cases "
+                    "(sample_id, platform, file_type, file_size_bytes, risk_score, status, narrative_summary, "
+                    "submitted_at, sha256, md5, sha1, raw_findings) "
+                    "VALUES (:sample_id, :platform, :file_type, :file_size_bytes, :risk_score, :status, :narrative_summary, "
+                    ":submitted_at, :sha256, :md5, :sha1, :raw_findings::jsonb) "
+                    "ON CONFLICT (sample_id) DO UPDATE SET "
+                    "risk_score = EXCLUDED.risk_score, status = EXCLUDED.status, "
+                    "narrative_summary = EXCLUDED.narrative_summary, raw_findings = EXCLUDED.raw_findings, updated_at = now()"
+                ),
+                {
+                    "sample_id": sample_id,
+                    "platform": case_data.get("platform"),
+                    "file_type": case_data.get("file_type"),
+                    "file_size_bytes": case_data.get("file_size_bytes"),
+                    "risk_score": case_data.get("risk_score"),
+                    "status": case_data.get("status"),
+                    "narrative_summary": case_data.get("narrative_summary"),
+                    "submitted_at": case_data.get("submitted_at"),
+                    "sha256": case_data.get("sha256"),
+                    "md5": case_data.get("md5"),
+                    "sha1": case_data.get("sha1"),
+                    "raw_findings": raw_findings,
+                },
+            )
+
+            await conn.execute(text("DELETE FROM mitre_techniques WHERE sample_id = :sid"), {"sid": sample_id})
+            for t in case_data.get("mitre_techniques", []):
+                await conn.execute(
+                    text(
+                        "INSERT INTO mitre_techniques (sample_id, technique_id, technique_name, confidence) "
+                        "VALUES (:sid, :tid, :tname, :conf)"
+                    ),
+                    {"sid": sample_id, "tid": t["technique_id"], "tname": t["technique_name"], "conf": t["confidence"]},
+                )
+
+            await conn.execute(text("DELETE FROM capability_tags WHERE sample_id = :sid"), {"sid": sample_id})
+            for c in case_data.get("capability_tags", []):
+                await conn.execute(
+                    text(
+                        "INSERT INTO capability_tags (sample_id, capability, confidence, evidence) "
+                        "VALUES (:sid, :cap, :conf, :ev::jsonb)"
+                    ),
+                    {"sid": sample_id, "cap": c["capability"], "conf": c["confidence"], "ev": json.dumps(c.get("evidence", []))},
+                )
+
+            await _append_chain_of_custody(
+                conn, sample_id, event_type,
+                f"risk_score={case_data.get('risk_score')}, status={case_data.get('status')}",
+            )
+    except Exception:
+        _LOGGER.exception("Postgres write failed for case %s — case is still available from the in-memory cache", sample_id)
+
+
+async def get_case(sample_id: str) -> Optional[dict]:
+    if not db.is_available():
+        with _lock:
+            return _store.get(sample_id)
+
+    try:
+        engine = db.get_engine()
+        async with engine.connect() as conn:
+            case_row = (
+                await conn.execute(text("SELECT * FROM cases WHERE sample_id = :sid"), {"sid": sample_id})
+            ).mappings().first()
+            if case_row is None:
+                with _lock:
+                    return _store.get(sample_id)
+            mitre_rows = (
+                await conn.execute(
+                    text("SELECT technique_id, technique_name, confidence FROM mitre_techniques WHERE sample_id = :sid"),
+                    {"sid": sample_id},
+                )
+            ).mappings().all()
+            cap_rows = (
+                await conn.execute(
+                    text("SELECT capability, confidence, evidence FROM capability_tags WHERE sample_id = :sid"),
+                    {"sid": sample_id},
+                )
+            ).mappings().all()
+            return _row_to_case(case_row, mitre_rows, cap_rows)
+    except Exception:
+        _LOGGER.exception("Postgres read failed for case %s — falling back to the in-memory cache", sample_id)
+        with _lock:
+            return _store.get(sample_id)
+
+
+async def list_cases() -> list[dict]:
+    if not db.is_available():
+        with _lock:
+            return list(_store.values())
+
+    try:
+        engine = db.get_engine()
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT sample_id, platform, file_type, risk_score, status, submitted_at "
+                        "FROM cases ORDER BY submitted_at DESC"
+                    )
+                )
+            ).mappings().all()
+            return [
+                {
+                    "sample_id": r["sample_id"],
+                    "platform": r["platform"],
+                    "file_type": r["file_type"],
+                    "risk_score": r["risk_score"],
+                    "status": r["status"],
+                    "submitted_at": r["submitted_at"].isoformat() if hasattr(r["submitted_at"], "isoformat") else r["submitted_at"],
+                }
+                for r in rows
+            ]
+    except Exception:
+        _LOGGER.exception("Postgres list failed — falling back to the in-memory cache")
+        with _lock:
+            return list(_store.values())
+
+
+async def case_exists(sample_id: str) -> bool:
+    return await get_case(sample_id) is not None

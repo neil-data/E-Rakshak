@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Node
+node_modules/
+frontend/build/
+frontend/dist/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sandbox / samples — NEVER commit real malware samples
+dynamic-sandbox/samples/
+*.exe
+*.apk
+!static-analysis/yara_rules/**/*.apk
+
+# Secrets
+*.pem
+*.key
+.env.local
+.pytest_cache/
+
+dynamic-sandbox/mobsf/test_files/
