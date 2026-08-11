@@ -132,7 +132,29 @@ async def _process_job(raw_job: str) -> None:
         return
 
     try:
-        case_data = await analyze_and_save(sample_path, event_type="ingested_via_queue")
+        original_filename = job.get("filename") or (Path(sample_path).name if sample_path else None)
+        validation_data = job.get("validation") or {}
+        mime_type = validation_data.get("mime_type")
+
+        case_data = await analyze_and_save(
+            sample_path,
+            event_type="ingested_via_queue",
+            extra_meta={
+                "original_filename": original_filename,
+                "mime_type": mime_type,
+            },
+        )
+        
+        # Check if dynamic analysis is already present (e.g., from loaded JSON/BSON).
+        # Otherwise run dynamic analysis.
+        if "dynamic_analysis" not in case_data:
+            from . import sandbox
+            from .store import save_case
+            dynamic = await sandbox.run_dynamic_analysis(sample_path, platform=case_data.get("platform"))
+            case_data["dynamic_analysis"] = dynamic
+            case_data["analysis_status"] = "COMPLETED"
+            await save_case(case_data["sample_id"], case_data, event_type="dynamic_analysis_checked")
+
         _LOGGER.info(
             "Ingestion queue processed sample %s -> case %s (risk_score=%s)",
             sample_id, case_data["sample_id"], case_data["risk_score"],

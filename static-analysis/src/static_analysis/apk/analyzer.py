@@ -76,7 +76,8 @@ class ApkAnalyzer(Analyzer):
                 manifest = archive.read("AndroidManifest.xml")
                 root = parse_manifest(manifest)
                 return ApkAnalysisResult(str(source), self._build_info(root, archive, metadata.file_size or 0), metadata, strings)
-        except (KeyError, OSError, zipfile.BadZipFile, ManifestParseError) as error:
+        # Python raises RuntimeError for encrypted ZIP entries. Keep the case analysable even when the manifest cannot be decrypted.
+        except (KeyError, OSError, RuntimeError, NotImplementedError, zipfile.BadZipFile, ManifestParseError) as error:
             return ApkAnalysisResult(str(source), None, metadata, strings, self._error_name(error))
 
     def _build_info(self, root: XmlNode, archive: zipfile.ZipFile, apk_size: int) -> ApkInfo:
@@ -153,6 +154,7 @@ class ApkAnalyzer(Analyzer):
     def _error_name(error: Exception) -> str:
         if isinstance(error, KeyError): return "missing_manifest"
         if isinstance(error, zipfile.BadZipFile): return "invalid_zip"
+        if isinstance(error, RuntimeError) and "encrypted" in str(error).lower(): return "encrypted_manifest"
         if isinstance(error, ManifestParseError): return "manifest_parse_error"
         return "read_error"
 

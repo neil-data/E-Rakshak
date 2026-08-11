@@ -24,7 +24,8 @@ import {
   Lock,
   ExternalLink,
   ChevronRight,
-  FileCheck
+  FileCheck,
+  Globe
 } from "lucide-react";
 
 import { AgencyLogo } from "./AgencyLogo";
@@ -36,13 +37,14 @@ import { DynamicSandboxTab } from "./dashboard/DynamicSandboxTab";
 import { MitreMappingTab } from "./dashboard/MitreMappingTab";
 import { AiReportsTab } from "./dashboard/AiReportsTab";
 import { InvestigationDashboardTab } from "./dashboard/InvestigationDashboardTab";
+import { NetworkIntelligenceTab } from "./dashboard/NetworkIntelligenceTab";
 import { setLanguage, getLanguage } from "../i18n";
 
 interface DashboardPageProps {
   onLogout: () => void;
 }
 
-import { fetchCases, fetchCaseDetail, uploadSample, fetchHealth, fetchCurrentUser, logout as apiLogout, CaseSummary, CaseDetail, CurrentUser } from "../lib/api";
+import { fetchCases, fetchCaseDetail, uploadSample, fetchAnalysisStatus, fetchHealth, fetchCurrentUser, logout as apiLogout, CaseSummary, CaseDetail, CurrentUser } from "../lib/api";
 
 export function DashboardPage({ onLogout }: DashboardPageProps) {
   const { t } = useTranslation();
@@ -53,7 +55,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
     setLanguageState(next);
   };
   const [activeTab, setActiveTab] = React.useState<
-    "overview" | "upload" | "static" | "dynamic" | "behavior" | "mitre" | "reports" | "investigation" | "cases"
+    "overview" | "upload" | "static" | "dynamic" | "behavior" | "mitre" | "reports" | "investigation" | "cases" | "network"
   >("overview");
 
   const [cases, setCases] = React.useState<ThreatCase[]>([]);
@@ -82,7 +84,9 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
       const data = await fetchCases();
       const mappedCases: ThreatCase[] = data.map((c: CaseSummary) => ({
         id: c.sample_id,
-        name: `${c.sample_id.toLowerCase()}.${c.file_type}`,
+        name: c.original_filename
+          ? `${c.original_filename} (${c.sample_id.toLowerCase().substring(0, 12)}…)`
+          : `${c.sample_id.toLowerCase()}.${c.file_type}`,
         type: c.file_type.toUpperCase() as any,
         size: "Dynamic",
         hash: c.sample_id,
@@ -144,7 +148,17 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
   const detailMitreTechniques = activeCaseDetail?.mitre_techniques ?? [];
   const detailCapabilityTags = activeCaseDetail?.capability_tags ?? [];
 
-  const activeCase: ThreatCase = activeCaseDetail && activeCaseDetail.sample_id === baseActiveCase.id
+  const isDetailMatch = Boolean(
+    activeCaseDetail && (
+      activeCaseDetail.sample_id === baseActiveCase.id ||
+      activeCaseDetail.sha256 === baseActiveCase.id ||
+      activeCaseDetail.sample_id === baseActiveCase.hash ||
+      activeCaseDetail.sha256 === baseActiveCase.hash ||
+      !baseActiveCase.id
+    )
+  );
+
+  const activeCase: ThreatCase = (activeCaseDetail && isDetailMatch)
     ? {
         ...baseActiveCase,
         riskScore: activeCaseDetail.risk_score,
@@ -161,8 +175,18 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
         packing: activeCaseDetail.packing,
         explainedStrings: activeCaseDetail.explained_strings,
         geoIocs: activeCaseDetail.geo_iocs,
+        sandboxResult: activeCaseDetail.dynamic_analysis ?? null,
+        // Part 2: Network Intelligence, Threat Assessment, AI Analysis
+        networkIndicators: activeCaseDetail.network_indicators ?? null,
+        threatAssessment: activeCaseDetail.threat_assessment ?? null,
+        aiAnalysis: activeCaseDetail.ai_analysis ?? null,
+        iocIntelligence: activeCaseDetail.ioc_intelligence ?? [],
+        evidenceCorrelation: activeCaseDetail.evidence_correlation ?? [],
+        evidenceTimeline: activeCaseDetail.evidence_timeline ?? [],
+        riskExplanation: activeCaseDetail.risk_explanation ?? null,
       }
     : baseActiveCase;
+
 
   // Live real-time UTC digital clock inside Top bar
   React.useEffect(() => {
@@ -184,44 +208,83 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
     setUploadProgress(10);
     setUploadStep(`Uploading ${file.name} to security gateway...`);
 
-    const timer = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev < 30) return prev + 10;
-        if (prev < 60) return prev + 5;
-        if (prev < 85) return prev + 3;
-        if (prev < 92) return prev + 1;
-        return prev;
-      });
-    }, 400);
+    const stageToProgress: Record<string, number> = {
+      UPLOADED: 15,
+      VALIDATING: 30,
+      HASHING: 40,
+      STATIC_ANALYSIS: 60,
+      DYNAMIC_ANALYSIS: 85,
+      COMPLETED: 100,
+    };
 
     try {
-      setUploadStep("Running 9-step Static Analysis & LangGraph Agent orchestration...");
-      const result = await uploadSample(file);
-      clearInterval(timer);
+      const start = await uploadSample(file);
+      const analysisId = start.analysis_id;
+
+      // Poll the backend for the real pipeline state (never a fake timer).
+      let status = start.status;
+      let stage = start.stage ?? "";
+      let analysisError = "";
+      setUploadProgress(stageToProgress[status] ?? 15);
+      setUploadStep(stage || "Analysis started...");
+      while (status !== "COMPLETED" && status !== "FAILED") {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        try {
+          const poll = await fetchAnalysisStatus(analysisId);
+          status = poll.status;
+          stage = poll.stage ?? stage;
+          analysisError = poll.error ?? analysisError;
+        } catch (e) {
+          // transient poll failure — keep waiting rather than aborting
+          continue;
+        }
+        setUploadProgress(stageToProgress[status] ?? 15);
+        setUploadStep(stage);
+        if (status === "COMPLETED" || status === "FAILED") break;
+      }
+
+      if (status === "FAILED") {
+        setIsUploading(false);
+        alert(`Analysis failed: ${analysisError || stage || "Unknown error during analysis"}`);
+        return;
+      }
+
       setUploadProgress(100);
       setUploadStep("Analysis complete! Dossier generated.");
 
-      // Backend responses aren't always guaranteed to include every field
-      // (e.g. partial/errored analyses) — default missing arrays/strings so
-      // a single incomplete response can't throw and crash the whole page.
-      const safeMitreTechniques = result.mitre_techniques ?? [];
-      const safeCapabilityTags = result.capability_tags ?? [];
+      // Fetch the full evidence-grade dossier (static + dynamic state).
+      const result = await fetchCaseDetail(analysisId);
 
       const newCase: ThreatCase = {
-        id: result.sample_id ?? `ER-${Date.now()}`,
-        name: file.name,
+        id: analysisId,
+        name: result.original_filename ?? file.name,
         type: (result.file_type ?? "unknown").toUpperCase() as any,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        hash: result.sample_id ?? "",
+        size: `${((result.file_size_bytes ?? file.size) / (1024 * 1024)).toFixed(1)} MB`,
+        hash: result.sha256 ?? analysisId,
         riskScore: result.risk_score ?? 0,
         status: (result.status ?? "analyzing").toUpperCase() as any,
         date: result.submitted_at ? result.submitted_at.replace("T", " ").substring(0, 19) : new Date().toISOString().substring(0, 19),
         agency: "Cyber Cell Ingestion Node",
-        mitreCount: safeMitreTechniques.length,
-        yaraMatches: safeCapabilityTags.map(c => (c.capability ?? "unknown").toUpperCase().replace(/\s+/g, "_")),
+        mitreCount: (result.mitre_techniques ?? []).length,
+        yaraMatches: (result.capability_tags ?? []).map(c => (c.capability ?? "unknown").toUpperCase().replace(/\s+/g, "_")),
         narrativeSummary: result.narrative_summary,
-        mitreTechniques: safeMitreTechniques,
-        capabilityTags: safeCapabilityTags,
+        mitreTechniques: result.mitre_techniques ?? [],
+        capabilityTags: result.capability_tags ?? [],
+        sha256: result.sha256,
+        md5: result.md5,
+        sha1: result.sha1,
+        yaraMatchDetails: result.yara_matches,
+        packing: result.packing,
+        explainedStrings: result.explained_strings,
+        geoIocs: result.geo_iocs,
+        sandboxResult: result.dynamic_analysis ?? null,
+        networkIndicators: result.network_indicators ?? null,
+        threatAssessment: result.threat_assessment ?? null,
+        aiAnalysis: result.ai_analysis ?? null,
+        iocIntelligence: result.ioc_intelligence ?? [],
+        evidenceCorrelation: result.evidence_correlation ?? [],
+        evidenceTimeline: result.evidence_timeline ?? [],
+        riskExplanation: result.risk_explanation ?? null,
       };
 
       setCases(prev => [newCase, ...prev]);
@@ -231,9 +294,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
         setIsUploading(false);
         setActiveTab("overview");
       }, 500);
-
     } catch (err: any) {
-      clearInterval(timer);
       setIsUploading(false);
       alert(`Upload failed: ${err.message || "Unknown error during analysis"}`);
     }
@@ -342,6 +403,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
               { id: "behavior", label: t("dashboard.nav.behavior"), icon: Workflow },
               { id: "mitre", label: t("dashboard.nav.mitre"), icon: Layers },
               { id: "reports", label: t("dashboard.nav.reports"), icon: FileText },
+              { id: "network", label: "Network Intel", icon: Globe },
               { id: "investigation", label: "Investigation", icon: Activity },
               { id: "cases", label: t("dashboard.nav.cases"), icon: Briefcase },
             ].map((tab) => {
@@ -483,7 +545,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
                   Forensic Ingestion Gateway
                 </h3>
                 <p className="text-[11px] text-[#A0A0A0] font-light">
-                  Ingest binary suspects securely inside localized air-gapped Sandboxes. Accepted formats: APK package, PE PE32/PE32+ executable, and kernel .sys drivers.
+                  Ingest binary suspects securely inside localized air-gapped Sandboxes. Accepted formats: APK, PE/EXE/DLL, ELF, Mach-O, or a ZIP containing one supported sample.
                 </p>
               </div>
 
@@ -492,6 +554,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
                 type="file"
                 id="file-upload-input"
                 className="hidden"
+                accept=".apk,.exe,.dll,.elf,.macho,.dylib,.zip,application/zip"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -511,7 +574,7 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-white uppercase tracking-wider">Drag & drop suspect binary here</p>
-                    <p className="text-[10px] text-[#6F6F6F]">or click directory finder to upload APK, PE, ELF, Mach-O</p>
+                    <p className="text-[10px] text-[#6F6F6F]">or click directory finder to upload APK, PE, ELF, Mach-O, or ZIP</p>
                   </div>
                 </div>
               </div>
@@ -649,6 +712,11 @@ export function DashboardPage({ onLogout }: DashboardPageProps) {
           {/* ================= TAB 8: INVESTIGATION DASHBOARD ================= */}
           {activeTab === "investigation" && (
             <InvestigationDashboardTab activeCase={activeCase} examiner={currentUser} />
+          )}
+
+          {/* ================= TAB 8b: NETWORK INTELLIGENCE TAB ================= */}
+          {activeTab === "network" && (
+            <NetworkIntelligenceTab activeCase={activeCase} />
           )}
 
           {/* ================= TAB 9: DATABASE REGISTRY ================= */}

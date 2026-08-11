@@ -107,24 +107,31 @@ export function OverviewTab({ activeCase, onNavigate }: OverviewTabProps) {
             <span className="text-[10px] text-[#6F6F6F] uppercase font-mono tracking-widest block">
               RISK ASSESSMENT
             </span>
-            <span className={`text-xl font-mono font-bold block ${activeCase.riskScore > 75 ? "text-[#ff4040]" : activeCase.riskScore > 40 ? "text-[#f4b400]" : "text-[#16ff4d]"}`}>
+            <span className={`text-xl font-mono font-bold block ${activeCase.riskScore >= 70 ? "text-[#ff4040]" : activeCase.riskScore >= 40 ? "text-[#f4b400]" : "text-[#16ff4d]"}`}>
               <AnimatedCounter value={activeCase.riskScore} suffix=" / 100" />
             </span>
             <div className="flex items-center gap-1.5 mt-1">
               <Sparkline data={activeCase.riskScore > 75 ? [20, 50, 45, 80, 95] : [10, 15, 30, 25, 45]} color={activeCase.riskScore > 75 ? "#ff4040" : "#f4b400"} />
               <div className="text-[8px] font-mono text-[#A0A0A0]">
-                {activeCase.riskScore > 75 ? (
-                  <span className="text-[#ff4040] flex items-center font-bold">CRITICAL <ArrowUpRight className="w-3 h-3 ml-0.5" /></span>
-                ) : (
-                  <span className="text-[#f4b400] flex items-center font-bold">SUSPICIOUS <ArrowUpRight className="w-3 h-3 ml-0.5" /></span>
-                )}
+                {(() => {
+                  const level = activeCase.threatAssessment?.threat_level ?? (activeCase.riskScore >= 70 ? "CRITICAL" : activeCase.riskScore >= 40 ? "HIGH" : "MEDIUM");
+                  const colorMap: Record<string, string> = { SEVERE: "#ff0000", CRITICAL: "#ff4040", HIGH: "#f4b400", MEDIUM: "#f4b400", LOW: "#16ff4d" };
+                  return <span style={{ color: colorMap[level] ?? "#f4b400" }} className="flex items-center font-bold">{level} <ArrowUpRight className="w-3 h-3 ml-0.5" /></span>;
+                })()}
               </div>
             </div>
+            {activeCase.threatAssessment && (
+              <span className="text-[8px] font-mono text-[#6F6F6F] block">
+                Verdict: <span className={`font-bold ${activeCase.threatAssessment.verdict === "MALICIOUS" ? "text-[#ff4040]" : activeCase.threatAssessment.verdict === "SUSPICIOUS" ? "text-[#f4b400]" : "text-[#16ff4d]"}`}>{activeCase.threatAssessment.verdict}</span>
+                {" · "}Confidence: <span className="text-white">{activeCase.threatAssessment.confidence}%</span>
+              </span>
+            )}
           </div>
-          <div className={`w-10 h-10 rounded bg-[#171717] border border-[#222222] flex items-center justify-center group-hover:scale-105 transition-transform duration-200 ${activeCase.riskScore > 75 ? "text-[#ff4040]" : "text-[#f4b400]"}`}>
+          <div className={`w-10 h-10 rounded bg-[#171717] border border-[#222222] flex items-center justify-center group-hover:scale-105 transition-transform duration-200 ${activeCase.riskScore >= 70 ? "text-[#ff4040]" : "text-[#f4b400]"}`}>
             <AlertTriangle className="w-5 h-5 animate-pulse" />
           </div>
         </div>
+
 
         {/* Card 3: MITRE ATT&CK Mapping */}
         <div className="bg-[#111111] border border-[#222222] p-5 rounded-lg flex items-center justify-between hover:bg-[#171717] hover:border-[#f4b400]/20 transition-all duration-200 shadow-md group">
@@ -304,6 +311,83 @@ export function OverviewTab({ activeCase, onNavigate }: OverviewTabProps) {
         </div>
 
       </div>
+
+      {/* Network Intelligence Observables Widget */}
+      {activeCase.networkIndicators && (
+        <div className="bg-[#111111] border border-[#222222] rounded-lg p-5 space-y-4">
+          <div className="flex justify-between items-center border-b border-[#222222]/60 pb-3">
+            <span className="text-[10px] text-[#6F6F6F] font-mono uppercase tracking-widest block font-bold">
+              Network Observables & Geolocation Attribution
+            </span>
+            <button
+              onClick={() => onNavigate("network")}
+              className="text-[#00c2ff] hover:underline text-[10px] font-mono uppercase focus:outline-none"
+            >
+              Detailed View & Map →
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-[#090909] border border-[#222222] p-4 rounded-lg space-y-2">
+              <span className="text-[9px] text-[#6F6F6F] uppercase tracking-widest font-mono font-bold block">IP addresses</span>
+              {activeCase.networkIndicators.ips.length === 0 ? (
+                <span className="text-xs text-[#444] font-mono">None extracted</span>
+              ) : (
+                <div className="space-y-1">
+                  {activeCase.networkIndicators.ips.slice(0, 3).map((ip, i) => (
+                    <div key={i} className="text-[11px] font-mono text-[#00c2ff] truncate">{ip}</div>
+                  ))}
+                  {activeCase.networkIndicators.ips.length > 3 && (
+                    <div className="text-[9px] text-[#6F6F6F] font-mono">+ {activeCase.networkIndicators.ips.length - 3} more</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#090909] border border-[#222222] p-4 rounded-lg space-y-2">
+              <span className="text-[9px] text-[#6F6F6F] uppercase tracking-widest font-mono font-bold block">Domains</span>
+              {activeCase.networkIndicators.domains.length === 0 ? (
+                <span className="text-xs text-[#444] font-mono">None extracted</span>
+              ) : (
+                <div className="space-y-1">
+                  {activeCase.networkIndicators.domains.slice(0, 3).map((d, i) => (
+                    <div key={i} className="text-[11px] font-mono text-[#f4b400] truncate">{d}</div>
+                  ))}
+                  {activeCase.networkIndicators.domains.length > 3 && (
+                    <div className="text-[9px] text-[#6F6F6F] font-mono">+ {activeCase.networkIndicators.domains.length - 3} more</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#090909] border border-[#222222] p-4 rounded-lg space-y-2">
+              <span className="text-[9px] text-[#6F6F6F] uppercase tracking-widest font-mono font-bold block">Geolocation Span</span>
+              {(activeCase.geoIocs ?? []).length === 0 ? (
+                <span className="text-xs text-[#444] font-mono">No locations mapped</span>
+              ) : (
+                <div className="space-y-1">
+                  {activeCase.geoIocs!.slice(0, 3).map((g, i) => {
+                    const place = [g.city, g.country].filter(Boolean).join(", ");
+                    return (
+                      <div key={i} className="text-[11px] font-mono text-white truncate flex items-center justify-between gap-2">
+                        <span>{g.ip}</span>
+                        <span className="text-[#6F6F6F] text-[10px] font-sans font-light truncate">{place || "unknown"}</span>
+                      </div>
+                    );
+                  })}
+                  {activeCase.geoIocs!.length > 3 && (
+                    <div className="text-[9px] text-[#6F6F6F] font-mono">+ {activeCase.geoIocs!.length - 3} more</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {(activeCase.geoIocs ?? []).length > 0 && (
+            <p className="text-[8px] text-[#444] font-mono italic flex items-center gap-1">
+              ⚠ Geolocation is an approximate geographic estimate and not an exact physical location.
+            </p>
+          )}
+        </div>
+      )}
 
     </div>
   );

@@ -45,13 +45,10 @@ services:
     ports:
       - "8001:8000"
     environment:
-      # Compose interpolates ${...} from the root .env, so pointing DATABASE_URL
-      # at a managed provider (Neon) there is now enough — this line used to
-      # hardcode the local container and silently override whatever .env said,
-      # so a "migrated to Neon" setup kept writing to the throwaway pg_data
-      # volume with no indication anything was wrong. Unset falls back to the
-      # bundled postgres service below, which is what local dev wants.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://ps4:ps4pass@postgres:5432/ps4_malware}
+      # DOCKER_DATABASE_URL allows overriding for container setups, while defaulting
+      # to the internal 'postgres' service container. This avoids inheriting a local
+      # dev '.env' DATABASE_URL pointing to localhost:5434 which causes crash-loops.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://ps4:ps4pass@postgres:5432/ps4_malware}
       ALLOW_DB_FALLBACK: ${ALLOW_DB_FALLBACK:-0}
       REDIS_URL: redis://redis:6379
       ELASTICSEARCH_URL: http://elasticsearch:9200

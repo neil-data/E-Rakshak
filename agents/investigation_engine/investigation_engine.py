@@ -660,9 +660,9 @@ class InvestigationEngine:
         print(f"[InvestigationEngine] Verified {result.verified_links}/{result.total_links} links")
         
         if result.is_valid:
-            print("[InvestigationEngine] ✅ Chain integrity verified")
+            print("[InvestigationEngine] [OK] Chain integrity verified")
         else:
-            print(f"[InvestigationEngine] ❌ Chain integrity check failed")
+            print(f"[InvestigationEngine] [FAIL] Chain integrity check failed")
             for error in result.errors:
                 print(f"[InvestigationEngine]   - {error}")
         

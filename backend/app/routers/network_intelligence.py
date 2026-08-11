@@ -15,6 +15,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -174,9 +175,10 @@ async def get_analysis_results(analysis_id: UUID, db: Session = Depends(get_db))
     Get the results of a completed network intelligence analysis.
     """
     # Query from database
-    result = db.query(NetworkAnalysisResult).filter(
+    stmt = select(NetworkAnalysisResult).where(
         NetworkAnalysisResult.analysis_id == analysis_id
-    ).first()
+    )
+    result = db.execute(stmt).scalar_one_or_none()
 
     if not result:
         raise HTTPException(status_code=404, detail="Analysis results not found")

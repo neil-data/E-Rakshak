@@ -164,6 +164,33 @@ CREATE TRIGGER trg_cases_updated_at
 
 
 -- ============================================================
+-- ANALYSIS_JOBS — per-sample analysis pipeline status tracking.
+-- Unlike `cases`, a row here exists from the moment a sample is
+-- accepted (before static/dynamic analysis has finished) so the
+-- frontend can poll real progress (UPLOADED -> VALIDATING ->
+-- HASHING -> STATIC_ANALYSIS -> DYNAMIC_ANALYSIS -> COMPLETED/
+-- FAILED) instead of guessing behind a fake timer.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS analysis_jobs (
+    analysis_id         VARCHAR(64) PRIMARY KEY,        -- == sha256 of the sample
+    user_email          VARCHAR(255),
+    original_filename   TEXT,
+    file_size_bytes     BIGINT,
+    mime_type           VARCHAR(120),
+    file_type           VARCHAR(10),                     -- apk | exe | dll | elf | macho
+    status              VARCHAR(20) NOT NULL DEFAULT 'UPLOADED',
+    stage               TEXT,
+    dynamic_status      TEXT,
+    error               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status ON analysis_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_updated_at ON analysis_jobs(updated_at DESC);
+
+
+-- ============================================================
 -- Idempotent upgrade for databases created before sha256/md5/sha1/
 -- raw_findings existed on `cases` — CREATE TABLE IF NOT EXISTS above is a
 -- no-op against an already-existing table, so this backend/app/db.py
@@ -174,3 +201,8 @@ ALTER TABLE cases ADD COLUMN IF NOT EXISTS sha256 VARCHAR(64);
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS md5 VARCHAR(32);
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS sha1 VARCHAR(40);
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS raw_findings JSONB;
+
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS analysis_status VARCHAR(20);
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS original_filename TEXT;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS mime_type VARCHAR(255);
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS dynamic_analysis JSONB;

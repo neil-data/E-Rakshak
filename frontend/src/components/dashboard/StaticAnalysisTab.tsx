@@ -87,7 +87,9 @@ export function StaticAnalysisTab({ activeCase }: StaticAnalysisTabProps) {
                 <p className="truncate"><span className="text-white font-bold">FILE:</span> {activeCase.name}</p>
                 <p><span className="text-white font-bold">TYPE:</span> {activeCase.type}</p>
                 <p><span className="text-white font-bold">SIZE:</span> {activeCase.size}</p>
-                <p className="break-all"><span className="text-white font-bold">SHA-256 / SAMPLE ID:</span> <span className="text-[#16ff4d]">{activeCase.hash}</span></p>
+                <p className="break-all"><span className="text-white font-bold">SHA-256:</span> <span className="text-[#16ff4d]">{activeCase.sha256 || activeCase.hash}</span></p>
+                {activeCase.md5 && <p className="break-all"><span className="text-white font-bold">MD5:</span> <span className="text-[#00c2ff]">{activeCase.md5}</span></p>}
+                {activeCase.sha1 && <p className="break-all"><span className="text-white font-bold">SHA-1:</span> <span className="text-[#00c2ff]">{activeCase.sha1}</span></p>}
                 <p><span className="text-white font-bold">SUBMITTED:</span> {activeCase.date}</p>
               </div>
             </div>
@@ -187,6 +189,34 @@ export function StaticAnalysisTab({ activeCase }: StaticAnalysisTabProps) {
                   ))}
                 </div>
               )}
+
+              {/* Geo-IP Observables */}
+              {(activeCase.geoIocs ?? []).length > 0 && (
+                <div className="bg-[#090909] border border-[#222222] rounded-lg p-4 space-y-2">
+                  <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest block font-bold">
+                    GEOLOCATION ATTRIBUTION (GEO-IP)
+                  </span>
+                  <div className="space-y-2">
+                    {(activeCase.geoIocs ?? []).map((g, i) => (
+                      <div key={i} className="font-mono text-[10px] border-b border-[#222222]/40 pb-2 last:border-b-0 last:pb-0">
+                        <div className="flex justify-between items-center text-[11px] text-[#00c2ff] font-bold">
+                          <span>{g.ip}</span>
+                          <span className="text-[#A0A0A0] font-sans font-normal">
+                            {[g.city, g.region, g.country].filter(Boolean).join(", ") || "Location unavailable"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 text-[9px] text-[#6F6F6F] mt-1">
+                          {g.isp && <div><span className="text-[#555]">ISP:</span> {g.isp}</div>}
+                          {g.asn && <div><span className="text-[#555]">ASN:</span> AS{g.asn}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[8px] text-[#6F6F6F] font-mono italic mt-2">
+                    ⚠ {(activeCase.geoIocs ?? [])[0]?.disclaimer ?? "Geo-IP is an approximate geographic estimate and not an exact physical location."}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -241,28 +271,20 @@ export function StaticAnalysisTab({ activeCase }: StaticAnalysisTabProps) {
               <p className="text-[10px] mt-1">Upload and analyze a binary to see real rule matches and detection results.</p>
             </div>
           ) : (
-            <div className="space-y-4 font-mono text-[11px] pt-2">
-              {yaraMatches.map((match, i) => {
-                const pseudoScore = 5.0 + (riskScore / 100) * 3.0 + (i * 0.1);
-                const isHigh = pseudoScore > 7.0;
-                return (
-                  <div key={i} className="p-4 bg-[#090909] border border-[#222222] rounded-lg">
-                    <div className="flex justify-between text-white text-xs mb-1.5">
-                      <span className="font-bold">{match}</span>
-                      <span className={isHigh ? "text-[#ff4040]" : "text-[#f4b400]"}>{pseudoScore.toFixed(2)} H</span>
-                    </div>
-                    <div className="w-full bg-[#171717] rounded-full h-2 overflow-hidden border border-[#222222]">
-                      <div
-                        className={`h-full rounded-full transition-all duration-1000 ${isHigh ? "bg-[#ff4040]" : "bg-[#f4b400]"}`}
-                        style={{ width: `${(pseudoScore / 8) * 100}%` }}
-                      />
-                    </div>
-                    <span className={`text-[9px] font-mono font-bold block mt-2 ${isHigh ? "text-[#ff4040]" : "text-[#f4b400]"}`}>
-                      {isHigh ? "HIGH CONFIDENCE MATCH — SUSPICIOUS INDICATOR" : "MEDIUM CONFIDENCE — ELEVATED INDICATOR"}
+            <div className="space-y-3 font-mono text-[11px] pt-2">
+              {yaraMatches.map((match, i) => (
+                <div key={i} className="p-4 bg-[#090909] border border-[#222222] rounded-lg flex items-center justify-between">
+                  <div className="space-y-1">
+                    <span className="font-bold text-white text-xs">{match}</span>
+                    <span className="text-[9px] font-mono text-[#6F6F6F] block uppercase tracking-wider">
+                      YARA SIGNATURE RULE MATCH
                     </span>
                   </div>
-                );
-              })}
+                  <span className="px-2.5 py-1 bg-red-950/30 border border-red-500/20 text-[#ff4040] font-mono text-[9px] rounded font-bold uppercase tracking-wide">
+                    MATCH TRIGGERED
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>

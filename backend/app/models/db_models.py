@@ -318,3 +318,29 @@ class LiveMonitoringAuditLog(Base):
     __table_args__ = (
         Index('idx_live_audit_analysis_timestamp', 'analysis_id', 'timestamp', postgresql_using='btree'),
     )
+
+
+class AnalysisJob(Base):
+    """Pipeline status tracking for per-sample analysis jobs."""
+    __tablename__ = "analysis_jobs"
+
+    analysis_id = Column(String(64), primary_key=True)
+    user_email = Column(String(255), nullable=True)
+    original_filename = Column(Text, nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
+    mime_type = Column(String(120), nullable=True)
+    file_type = Column(String(10), nullable=True)
+
+    status = Column(String(20), nullable=False, default="UPLOADED", index=True)
+    stage = Column(Text, nullable=True)
+    dynamic_status = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_analysis_jobs_status', 'status', postgresql_using='btree'),
+        Index('idx_analysis_jobs_updated_at', 'updated_at', postgresql_using='btree'),
+    )
+

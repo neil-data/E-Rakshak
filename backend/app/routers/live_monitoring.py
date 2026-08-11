@@ -13,9 +13,9 @@ import logging
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException, status
-from sqlalchemy import select, desc, and_
+from sqlalchemy import select, desc, and_, func
 from sqlalchemy.orm import Session
 
 from ..models.live_monitoring import (
@@ -189,14 +189,13 @@ async def get_live_status(
     # Count events by type
     event_counts = {}
     for event_type in EventType:
-        stmt = select(AnalysisEvent).where(
+        count_stmt = select(func.count()).select_from(AnalysisEvent).where(
             and_(
                 AnalysisEvent.analysis_id == analysis_id,
                 AnalysisEvent.event_type == event_type
             )
         )
-        count = db.query(stmt).count()
-        event_counts[event_type] = count
+        event_counts[event_type] = db.execute(count_stmt).scalar_one()
 
     # Get current risk score
     stmt = select(RiskScore).where(
@@ -207,13 +206,13 @@ async def get_live_status(
     current_risk = last_score.score if last_score else 0
 
     # Count active alerts
-    stmt = select(Alert).where(
+    alert_count = select(func.count()).select_from(Alert).where(
         and_(
             Alert.analysis_id == analysis_id,
             Alert.dismissed == False
         )
     )
-    active_alerts = db.query(stmt).count()
+    active_alerts = db.execute(alert_count).scalar_one()
 
     # Get last event timestamp
     stmt = select(AnalysisEvent).where(
@@ -222,15 +221,18 @@ async def get_live_status(
 
     last_event = db.execute(stmt).scalar_one_or_none()
     last_event_ts = last_event.timestamp if last_event else None
-    
-    # Get analysis record for actual status and platform
-    from ..models.db_models import Analysis
-    stmt = select(Analysis).where(Analysis.analysis_id == analysis_id)
-    analysis = db.execute(stmt).scalar_one_or_none()
-    
-    # Get actual status and platform from analysis record
-    status = analysis.status if analysis else "unknown"
-    platform = analysis.platform if analysis else "unknown"
+
+    # Derive the live status from the monitoring session rather than a
+    # non-existent "Analysis" table: an active session is "running", a
+    # finished one "completed", otherwise "unknown". Platform is best-effort.
+    session_count = select(func.count()).select_from(LiveMonitoringSession).where(
+        and_(
+            LiveMonitoringSession.analysis_id == analysis_id,
+            LiveMonitoringSession.is_active == True
+        )
+    )
+    status = "running" if db.execute(session_count).scalar_one() > 0 else "unknown"
+    platform = "windows"
 
     return LiveMonitoringStatus(
         analysis_id=analysis_id,
@@ -277,10 +279,10 @@ async def get_live_events(
         stmt = stmt.where(AnalysisEvent.event_type == event_type)
 
     # Get total count
-    total_stmt = select(AnalysisEvent).where(
+    total_count = select(func.count()).select_from(AnalysisEvent).where(
         AnalysisEvent.analysis_id == analysis_id
     )
-    total = db.query(total_stmt).count()
+    total = db.execute(total_count).scalar_one()
 
     # Apply pagination
     stmt = stmt.order_by(desc(AnalysisEvent.timestamp)).offset(offset).limit(limit)
@@ -348,7 +350,7 @@ async def get_live_iocs(
 @router.post("/{analysis_id}/sandbox/control")
 async def sandbox_control(
     analysis_id: UUID,
-    action: str = Query(..., regex="^(pause|resume|kill)$"),
+    action: str = Query(..., pattern="^(pause|resume|kill)$"),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Control sandbox execution via CAPE API."""

@@ -184,13 +184,99 @@ def _enrich_asn(record: dict) -> dict:
     return record
 
 
+GEOIP_DISCLAIMER = "Geo-IP is an approximate geographic estimate and not an exact physical location."
+
+
+def _is_private_ip(ip: str) -> bool:
+    """Check if IP is private, loopback, or non-routable."""
+    try:
+        import ipaddress
+        obj = ipaddress.ip_address(ip)
+        return obj.is_private or obj.is_loopback or obj.is_link_local or obj.is_multicast or obj.is_reserved
+    except Exception:
+        return True
+
+
+def _lookup_http_fallback(ip: str) -> Optional[dict]:
+    """Fallback lookup via ip-api.com when local MaxMind DB is unconfigured or misses the IP."""
+    if _is_private_ip(ip):
+        return None
+    try:
+        import urllib.request
+        import json
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,mobile,proxy,hosting"
+        req = urllib.request.Request(url, headers={"User-Agent": "SentinelScan/1.0"})
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("status") == "success":
+                    as_raw = data.get("as", "")
+                    asn_num = None
+                    if as_raw.startswith("AS"):
+                        try:
+                            asn_num = int(as_raw.split()[0][2:])
+                        except Exception:
+                            pass
+                    org = data.get("org") or data.get("isp")
+                    return {
+                        "ip": ip,
+                        "country": data.get("country"),
+                        "country_iso": data.get("countryCode"),
+                        "city": data.get("city"),
+                        "region": data.get("regionName"),
+                        "postal_code": data.get("zip"),
+                        "timezone": data.get("timezone"),
+                        "latitude": data.get("lat"),
+                        "longitude": data.get("lon"),
+                        "accuracy_radius": 50,
+                        "asn": asn_num,
+                        "asn_org": org,
+                        "isp": data.get("isp"),
+                        "is_hosting": data.get("hosting") or _is_hosting_org(org),
+                        "is_proxy": data.get("proxy"),
+                        "threat_level": "HIGH" if data.get("proxy") or data.get("hosting") else "MEDIUM",
+                        "disclaimer": GEOIP_DISCLAIMER,
+                    }
+    except Exception as e:
+        _LOGGER.debug("HTTP GeoIP fallback skipped for %s: %s", ip, e)
+    return None
+
+
 def lookup(ip: str) -> Optional[dict]:
     """Resolve one IP to detailed geolocation + ASN attribution, or None."""
+    if _is_private_ip(ip):
+        return {
+            "ip": ip,
+            "country": "Internal / Private Network",
+            "country_iso": "PRIVATE",
+            "city": "Private Network",
+            "region": "RFC 1918 / RFC 4193",
+            "postal_code": None,
+            "timezone": "Local",
+            "latitude": None,
+            "longitude": None,
+            "accuracy_radius": None,
+            "asn": None,
+            "asn_org": "Internal / Private Network",
+            "isp": "Local Area Network",
+            "is_hosting": False,
+            "is_proxy": False,
+            "threat_level": "LOW",
+            "disclaimer": GEOIP_DISCLAIMER,
+        }
+
     _ensure_loaded()
     record = _lookup_city(ip)
-    if record is None:
-        return None
-    return _enrich_asn(record)
+    if record is not None:
+        record = _enrich_asn(record)
+        record["disclaimer"] = GEOIP_DISCLAIMER
+        return record
+
+    fallback = _lookup_http_fallback(ip)
+    if fallback is not None:
+        return fallback
+
+    return None
 
 
 def lookup_many(ips: list[str]) -> list[dict]:
@@ -198,7 +284,11 @@ def lookup_many(ips: list[str]) -> list[dict]:
     if not ips:
         return []
     results = []
+    seen = set()
     for ip in ips:
+        if ip in seen:
+            continue
+        seen.add(ip)
         result = lookup(ip)
         if result is not None:
             results.append(result)

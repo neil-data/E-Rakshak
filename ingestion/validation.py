@@ -160,6 +160,8 @@ _FORMAT_METADATA = {
     "dll": ("application/vnd.microsoft.portable-executable", "windows"),
     "elf": ("application/x-elf", "linux"),
     "mach_o": ("application/x-mach-binary", "macos"),
+    "json": ("application/json", "cross-platform"),
+    "bson": ("application/bson", "cross-platform"),
 }
 
 # Extensions conventionally used for each format. Used only to report a
@@ -170,6 +172,8 @@ _FORMAT_EXTENSIONS = {
     "dll": {".dll", ".ocx", ".sys"},
     "elf": {".elf", ".so", ".bin", ""},
     "mach_o": {".dylib", ".bundle", ".macho", ""},
+    "json": {".json"},
+    "bson": {".bson"},
 }
 
 _MACH_O_THIN_MAGICS = {
@@ -262,6 +266,38 @@ def _detect_mach_o(handle: BinaryIO) -> Optional[str]:
     return "mach_o"
 
 
+def _detect_json(handle: BinaryIO, path: Optional[Path] = None) -> Optional[str]:
+    """Check if the file content starts with '{' or '[' (ignoring leading whitespace/BOM) or has .json extension."""
+    prefix = _read_at(handle, 0, 100).lstrip(b"\xef\xbb\xbf \t\r\n")
+    if prefix.startswith(b"{") or prefix.startswith(b"["):
+        return "json"
+    if path and path.suffix.lower() == ".json":
+        return "json"
+    return None
+
+
+def _detect_bson(handle: BinaryIO, path: Path) -> Optional[str]:
+    """Check if the file content could be BSON."""
+    size_bytes = path.stat().st_size
+    if size_bytes < 5:
+        return None
+    header = _read_at(handle, 0, 4)
+    if len(header) != 4:
+        return None
+    try:
+        bson_size = struct.unpack("<I", header)[0]
+        if bson_size == size_bytes:
+            last_byte = _read_at(handle, size_bytes - 1, 1)
+            if last_byte == b"\x00":
+                return "bson"
+    except Exception:
+        pass
+    # Secondary check: if the filename extension is .bson, accept it
+    if path.suffix.lower() == ".bson":
+        return "bson"
+    return None
+
+
 def detect_format(path: Path) -> Optional[str]:
     """
     Return the detected format key, or None if the bytes match no supported format.
@@ -277,6 +313,8 @@ def detect_format(path: Path) -> Optional[str]:
             or _detect_pe(handle)
             or _detect_elf(handle)
             or _detect_mach_o(handle)
+            or _detect_json(handle, path)
+            or _detect_bson(handle, path)
         )
 
 

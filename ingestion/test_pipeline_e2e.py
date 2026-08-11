@@ -47,8 +47,8 @@ class _AnalysisRecorder:
         self.calls: list[dict] = []
         self.raise_unsupported = False
 
-    async def __call__(self, sample_path, event_type="static_analysis_complete"):
-        self.calls.append({"sample_path": str(sample_path), "event_type": event_type})
+    async def __call__(self, sample_path, event_type="static_analysis_complete", extra_meta=None, **kwargs):
+        self.calls.append({"sample_path": str(sample_path), "event_type": event_type, "extra_meta": extra_meta})
         if self.raise_unsupported:
             raise _StubUnsupportedFormatError("stubbed unsupported format")
         return {
@@ -145,6 +145,7 @@ def upload(client, data: bytes, filename: str, **form):
 # End-to-end
 # ---------------------------------------------------------------------------
 
+@pytest.mark.asyncio
 class TestUploadToConsumerPickup:
     async def test_sample_uploaded_via_api_is_resolved_by_the_consumer(self, client, worker):
         """The complete happy path: bytes in at the API, same bytes out at the consumer."""
@@ -209,6 +210,7 @@ class TestUploadToConsumerPickup:
         assert job["validation"]["extension_mismatch"] is True
 
 
+@pytest.mark.asyncio
 class TestConsumerLoop:
     async def test_consume_loop_drains_jobs_produced_by_the_gateway(self, client, worker):
         """Drives the real BLPOP loop against real gateway output."""
@@ -252,6 +254,7 @@ class TestConsumerLoop:
         assert recorder.paths[0] == scam["sample_path"]
 
 
+@pytest.mark.asyncio
 class TestPipelineResilience:
     async def test_rejected_upload_never_reaches_the_consumer(self, client, worker):
         """

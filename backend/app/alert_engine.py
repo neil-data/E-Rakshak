@@ -273,10 +273,20 @@ class AlertEngine:
         ]
         return any(api in api_name for api in capture_apis)
 
-    def _check_persistence(self, event: EnrichedEvent) -> bool:
-        """Check for persistence mechanisms."""
-        if event.event_type == EventType.REGISTRY:
-            key_path = event.event_data.get("key_path", "").lower()
+    def _check_persistence(self, event: Any) -> bool:
+        """Check for persistence mechanisms (supports both dict and EnrichedEvent)."""
+        if isinstance(event, dict):
+            event_type = event.get("event_type")
+            event_data = event.get("event_data", {})
+        else:
+            event_type = getattr(event, "event_type", None)
+            event_data = getattr(event, "event_data", {}) or {}
+
+        # Normalize EventType enum vs string
+        event_type_val = event_type.value if hasattr(event_type, "value") else str(event_type)
+
+        if event_type_val in (EventType.REGISTRY.value, "registry"):
+            key_path = str(event_data.get("key_path", "")).lower().replace("/", "\\")
             persistence_keys = [
                 "\\run",
                 "\\runonce",
@@ -286,14 +296,14 @@ class AlertEngine:
             ]
             return any(key in key_path for key in persistence_keys)
 
-        elif event.event_type == EventType.FILE:
-            path = event.event_data.get("path", "").lower()
+        elif event_type_val in (EventType.FILE.value, "file"):
+            path = str(event_data.get("path", "")).lower().replace("/", "\\")
             startup_paths = [
                 "startup",
-                "programdata\\\\microsoft\\\\windows\\\\start menu",
-                "appdata\\\\roaming\\\\microsoft\\\\windows\\\\start menu",
+                "programdata\\microsoft\\windows\\start menu",
+                "appdata\\roaming\\microsoft\\windows\\start menu",
             ]
-            return any(path in path for path in startup_paths)
+            return any(needle in path for needle in startup_paths)
 
         return False
 

@@ -1,9 +1,9 @@
 import * as React from "react";
-import { FileText, Download, Check, ShieldCheck, ScrollText, ListChecks, Fingerprint } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { Download, Check, ShieldCheck, ScrollText, ListChecks, Fingerprint, Cpu } from "lucide-react";
 import { ThreatCase } from "./types";
 import { CurrentUser } from "../../lib/api";
-import { AgencyLogo, loadAgencyLogoDataUrl } from "../AgencyLogo";
+import { AgencyLogo } from "../AgencyLogo";
+import { generateForensicPDF } from "../../lib/reportPdf";
 
 interface AiReportsTabProps {
   activeCase: ThreatCase;
@@ -221,177 +221,6 @@ const YARA_DESC_GU: Record<string, string> = {
 // translated — case data itself (narrative summary, YARA descriptions,
 // evidence strings) comes from the backend/engine as-is and stays in
 // whatever language it was generated in.
-const PDF_LABELS = {
-  en: {
-    title: "SentinelScan Forensic Analysis Report",
-    subtitle: "E-Rakshak Cyber Crime Investigation Platform · Gujarat Police (Cyber Cell)",
-    h1: "1. Case Summary", h2: "2. File Identification", h3: "3. Static Analysis Findings",
-    h4: "4. MITRE ATT&CK Technique Mapping", h4b: "4b. Network Indicator Geolocation (Geo-IP Analysis)",
-    h4c: "4c. Detailed Geo-IP Intelligence", h5: "5. Capability Assessment", h6: "6. Investigator Recommendations", h7: "7. Examiner & Record of Analysis",
-    h8: "8. Behavioral Timeline Analysis", h9: "9. IOC & Threat Intelligence", h10: "10. Evidence Chain & Appendix",
-    sample: "Sample:", fileType: "File type:", caseId: "Case ID (SHA-256):", riskScore: "Risk score:",
-    verdict: "Verdict:", submitted: "Submitted:", sha256: "SHA-256:", md5: "MD5:", sha1: "SHA-1:",
-    examiningOfficer: "Examining officer:", department: "Department:", reportGenerated: "Report generated:",
-    noSummary: (name: string) => `Automated static analysis was performed on the submitted artifact ${name}. No AI-generated plain-language summary was available for this case.`,
-    noRuleMatches: "No rule-engine matches were triggered for this sample.",
-    notableIndicators: "Notable extracted indicators:",
-    noMitre: "No MITRE ATT&CK techniques were matched for this case.",
-    noCapability: "No specific capability could be confirmed from static analysis alone.",
-    packedYes: (packerName: string | null) => `Packing: this sample appears to be packed/compressed${packerName ? ` (likely ${packerName})` : ""}. `,
-    unpackedYes: "It was automatically unpacked for deeper analysis.",
-    unpackedNo: (attempted: boolean, error: string | null) => `Automatic unpacking was ${attempted ? "attempted but not successful" : "not attempted"}${error ? ` (${error})` : ""}.`,
-    packedNo: "Packing: this sample does not show signs of being packed or compressed.",
-    locationUnavailable: "location unavailable",
-    disclaimer: "This report was produced by automated static analysis. It is intended to assist an investigator's assessment and should be corroborated by a qualified forensic examiner and, where required, dynamic (sandboxed) analysis before being relied upon as standalone evidence.",
-    footer: (id: string, page: number) => `SentinelScan · Case ${id} · Page ${page}`,
-    geoIpTitle: "Geo-IP Intelligence Details",
-    geoIpIp: "IP Address:",
-    geoIpCountry: "Country:",
-    geoIpCountryIso: "Country Code:",
-    geoIpCity: "City:",
-    geoIpRegion: "Region/State:",
-    geoIpPostal: "Postal Code:",
-    geoIpIsp: "ISP/Organization:",
-    geoIpAsn: "ASN:",
-    geoIpLatitude: "Latitude:",
-    geoIpLongitude: "Longitude:",
-    geoIpTimezone: "Timezone:",
-    geoIpAccuracy: "Accuracy Radius:",
-    geoIpThreatLevel: "Threat Level:",
-    geoIpIsProxy: "Proxy/VPN Detected:",
-    geoIpIsHosting: "Hosting Provider:",
-    geoIpNotAvailable: "not available",
-    geoIpYes: "Yes",
-    geoIpNo: "No",
-    geoIpUnknown: "Unknown",
-    behaviorTitle: "Behavioral Timeline Events",
-    behaviorTime: "Timestamp:",
-    behaviorEvent: "Event:",
-    behaviorSeverity: "Severity:",
-    behaviorDesc: "Description:",
-    behaviorEvidence: "Evidence:",
-    behaviorNone: "No dynamic (sandbox) behavior data was captured for this case — the timeline below reflects the automated static-analysis pipeline stages executed on the submitted artifact.",
-    iocTitle: "Indicators of Compromise (IOC)",
-    iocType: "Type:",
-    iocValue: "Value:",
-    iocContext: "Context:",
-    iocNone: "No indicators of compromise were extracted for this case.",
-    chainTitle: "Evidence Chain Verification",
-    chainStatus: "Verification Status:",
-    chainValid: "Chain Valid:",
-    chainLinks: "Verified Links:",
-    chainTotal: "Total Links:",
-    chainTampered: "Tampered Links:",
-    chainMissing: "Missing Links:",
-    chainIntro: "This report is integrity-bound to the analyzed artifact through the SHA-256 digest below. Recompute the digest of the preserved sample and compare against this value to confirm the evidence chain was not altered.",
-    chainSha256: "Chain anchor (SHA-256):",
-    chainHashMatch: "Hash match — evidence chain anchored and consistent.",
-    appendixTitle: "Appendix: Raw Technical Data",
-    appendixIntro: "The following raw technical records are retained for examiner review and independent verification.",
-    appendixYara: "Rule-engine (YARA) matches:",
-    appendixStrings: "Extracted indicator strings:",
-    appendixGeo: "Geo-IP records:",
-    appendixMitre: "MITRE ATT&CK techniques:",
-    appendixCapabilities: "Capability evidence:",
-    appendixNone: "No raw records to list.",
-  },
-  gu: {
-    title: "સેન્ટિનેલસ્કેન ફોરેન્સિક વિશ્લેષણ અહેવાલ",
-    subtitle: "ઇ-રક્ષક સાયબર ગુનાહ તપાસ પ્લેટફોર્મ · ગુજરાત પોલીસ (સાયબર સેલ)",
-    h1: "૧. કેસ સારાંશ", h2: "૨. ફાઇલ ઓળખ", h3: "૩. સ્ટેટિક વિશ્લેષણ તારણો",
-    h4: "૪. મિટ્રે ટેકનિક મેપિંગ", h4b: "૪(બી). નેટવર્ક સૂચકનું ભૌગોલિક સ્થાન (જિયો-આઈપી વિશ્લેષણ)",
-    h4c: "૪(સી). વિસ્તૃત જિયો-આઈપી માહિતી", h5: "૫. ક્ષમતા મૂલ્યાંકન", h6: "૬. તપાસકર્તા ભલામણો", h7: "૭. પરીક્ષક અને વિશ્લેષણ રેકોર્ડ",
-    h8: "૮. વર્તન સમયરેખા વિશ્લેષણ", h9: "૯. ચેડાં સૂચક અને ભય માહિતી", h10: "૧૦. પુરાવા શ્રૃંકલા અને પરિશિષ્ટ",
-    sample: "નમૂનો:", fileType: "ફાઇલ પ્રકાર:", caseId: "કેસ નંબર (શા-256):", riskScore: "જોખમ સ્કોર:",
-    verdict: "ચુકાદો:", submitted: "સબમિટ તારીખ:", sha256: "શા-256:", md5: "એમડી5:", sha1: "શા-1:",
-    examiningOfficer: "તપાસ કરનાર અધિકારી:", department: "વિભાગ:", reportGenerated: "અહેવાલ બનાવવાની તારીખ:",
-    noSummary: (name: string) => `સબમિટ કરેલા આર્ટિફેક્ટ ${name} પર સ્વયંસંચાલિત સ્ટેટિક વિશ્લેષણ કરવામાં આવ્યું. આ કેસ માટે કોઈ AI-જનરેટેડ સરળ-ભાષા સારાંશ ઉપલબ્ધ નથી.`,
-    noRuleMatches: "આ નમૂના માટે કોઈ નિયમ-એન્જિન મેચ ટ્રિગર થયા નથી.",
-    notableIndicators: "નોંધપાત્ર એક્સ્ટ્રેક્ટેડ સૂચકો:",
-    noMitre: "આ કેસ માટે કોઈ મિટ્રે ટેકનિક મેચ થઈ નથી.",
-    noCapability: "ફક્ત સ્ટેટિક વિશ્લેષણથી કોઈ ચોક્કસ ક્ષમતાની પુષ્ટિ થઈ શકી નથી.",
-    packedYes: (packerName: string | null) => `પેકિંગ: આ નમૂનો પેક/કમ્પ્રેસ્ડ હોવાનું જણાય છે${packerName ? ` (સંભવતઃ ${packerName})` : ""}. `,
-    unpackedYes: "ઊંડા વિશ્લેષણ માટે તેને આપમેળે અનપેક કરવામાં આવ્યું હતું.",
-    unpackedNo: (attempted: boolean, error: string | null) => `સ્વયંસંચાલિત અનપેકિંગ ${attempted ? "પ્રયાસ કરવામાં આવ્યો પણ સફળ થયો નહીં" : "પ્રયાસ કરવામાં આવ્યો નથી"}${error ? ` (${error})` : ""}.`,
-    packedNo: "પેકિંગ: આ નમૂનામાં પેક અથવા કમ્પ્રેસ્ડ હોવાના કોઈ સંકેત નથી.",
-    locationUnavailable: "સ્થાન ઉપલબ્ધ નથી",
-    disclaimer: "આ અહેવાલ સ્વયંસંચાલિત સ્ટેટિક વિશ્લેષણ દ્વારા બનાવવામાં આવ્યો હતો. તે તપાસકર્તાના મૂલ્યાંકનમાં મદદ કરવા માટે છે અને તેને લાયક ફોરેન્સિક પરીક્ષક દ્વારા અને જ્યાં જરૂરી હોય ત્યાં ડાયનેમિક (સેન્ડબોક્સ્ડ) વિશ્લેષણ દ્વારા સમર્થિત કરવું જોઈએ, તે પહેલાં તેને સ્વતંત્ર પુરાવા તરીકે વિશ્વાસ કરવો જોઈએ.",
-    footer: (id: string, page: number) => `સેન્ટિનેલસ્કેન · કેસ ${id} · પાનું ${page}`,
-    geoIpTitle: "જિયો-આઈપી માહિતી વિગતો",
-    geoIpIp: "આઈપી સરનામું:",
-    geoIpCountry: "દેશ:",
-    geoIpCountryIso: "દેશ કોડ:",
-    geoIpCity: "શહેર:",
-    geoIpRegion: "પ્રદેશ/રાજ્ય:",
-    geoIpPostal: "પિન કોડ:",
-    geoIpIsp: "ઇન્ટરનેટ પ્રદાતા/સંસ્થા:",
-    geoIpAsn: "એએસએન:",
-    geoIpLatitude: "અક્ષાંશ:",
-    geoIpLongitude: "રેખાંશ:",
-    geoIpTimezone: "સમયક્ષેત્ર:",
-    geoIpAccuracy: "ચોકસાઈ ત્રિજ્યા:",
-    geoIpThreatLevel: "ભય સ્તર:",
-    geoIpIsProxy: "પ્રોક્સી/વીપીએન શોધાયું:",
-    geoIpIsHosting: "હોસ્ટિંગ પ્રદાતા:",
-    geoIpNotAvailable: "ઉપલબ્ધ નથી",
-    geoIpYes: "હા",
-    geoIpNo: "ના",
-    geoIpUnknown: "અજ્ઞાત",
-    behaviorTitle: "વર્તન સમયરેખા ઘટનાઓ",
-    behaviorTime: "સમયગાળો:",
-    behaviorEvent: "ઘટના:",
-    behaviorSeverity: "ગંભીરતા:",
-    behaviorDesc: "વર્ણન:",
-    behaviorEvidence: "પુરાવા:",
-    behaviorNone: "આ કેસ માટે કોઈ ડાયનેમિક (સેન્ડબોક્સ) વર્તન ડેટા કેપ્ચર થયો નથી — નીચેની સમયરેખા સબમિટ કરેલા આર્ટિફેક્ટ પર ચલાવવામાં આવેલા સ્વયંસંચાલિત સ્ટેટિક વિશ્લેષણ પાઇપલાઇન તબક્કાઓ દર્શાવે છે.",
-    iocTitle: "ચેડાં સૂચકો (આઈઓસી)",
-    iocType: "પ્રકાર:",
-    iocValue: "મૂલ્ય:",
-    iocContext: "સંદર્ભ:",
-    iocNone: "આ કેસ માટે કોઈ ચેડાં સૂચક એક્સ્ટ્રેક્ટ થયા નથી.",
-    chainTitle: "પુરાવા શ્રૃંકલા પુષ્ટિ",
-    chainStatus: "પુષ્ટિ સ્થિતિ:",
-    chainValid: "શ્રૃંકલા માન્ય:",
-    chainLinks: "પુષ્ટિ થયેલી કડીઓ:",
-    chainTotal: "કુલ કડીઓ:",
-    chainTampered: "છેડછાડવાળી કડીઓ:",
-    chainMissing: "ગાયબ કડીઓ:",
-    chainIntro: "આ અહેવાલ નીચેના શા-256 ડાયજેસ્ટ દ્વારા વિશ્લેષિત આર્ટિફેક્ટ સાથે સંકળાયેલો છે. સાચવેલા નમૂનાનો ડાયજેસ્ટ ફરી ગણતરી કરી આ મૂલ્ય સાથે સરખાવવાથી પુરાવા શ્રૃંકલા બદલાઈ નથી તેની ખાતરી કરી શકાય છે.",
-    chainSha256: "શ્રૃંકલા એન્કર (શા-256):",
-    chainHashMatch: "હેશ મેળ ખાય છે — પુરાવા શ્રૃંકલા એન્કર અને સુસંગત છે.",
-    appendixTitle: "પરિશિષ્ટ: કાચો તકનીકી ડેટા",
-    appendixIntro: "નીચેના કાચા તકનીકી રેકોર્ડ પરીક્ષકની સમીક્ષા અને સ્વતંત્ર ચકાસણી માટે રાખવામાં આવ્યા છે.",
-    appendixYara: "રૂલ-એન્જિન (YARA) મેચ:",
-    appendixStrings: "એક્સ્ટ્રેક્ટેડ સૂચક સ્ટ્રિંગ્સ:",
-    appendixGeo: "જિયો-આઈપી રેકોર્ડ્સ:",
-    appendixMitre: "મિટ્રે ટેકનિકો:",
-    appendixCapabilities: "ક્ષમતા પુરાવા:",
-    appendixNone: "સૂચિબદ્ધ કરવા માટે કોઈ કાચા રેકોર્ડ નથી.",
-  },
-};
-
-const GUJARATI_FONT_URL = "/fonts/NotoSansGujarati-Regular.ttf";
-const GUJARATI_FONT_FILENAME = "NotoSansGujarati-Regular.ttf";
-const GUJARATI_FONT_NAME = "NotoSansGujarati";
-
-async function loadGujaratiFontBase64(): Promise<string | null> {
-  try {
-    const res = await fetch(GUJARATI_FONT_URL);
-    if (!res.ok) return null;
-    const buffer = await res.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    // btoa needs a binary string; chunk to avoid call-stack limits on large fonts.
-    const chunkSize = 8192;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
-    return btoa(binary);
-  } catch {
-    return null;
-  }
-}
-
 export function AiReportsTab({ activeCase, examiner }: AiReportsTabProps) {
   const [activeBookmark, setActiveBookmark] = React.useState("summary");
   const [language, setLanguage] = React.useState<"en" | "gu">("en");
@@ -444,327 +273,24 @@ export function AiReportsTab({ activeCase, examiner }: AiReportsTabProps) {
     setIsExporting(true);
     setExportDone(false);
     setExportError("");
-
     try {
-      const L = PDF_LABELS[language];
-      const doc = new jsPDF({ unit: "pt", format: "a4" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 48;
-      const maxWidth = pageWidth - margin * 2;
-      let y = 56;
-
-      // Gujarati text needs a Unicode font embedded — jsPDF's built-in
-      // "helvetica" only covers Latin glyphs. Noto Sans Gujarati (OFL
-      // licensed) is fetched once per export and registered with jsPDF;
-      // falls back to Latin/tofu-free English if the font can't be loaded
-      // rather than failing the export outright. Note: jsPDF does basic
-      // glyph placement, not full OpenType shaping — complex conjuncts may
-      // render slightly differently than in a browser, which is a known
-      // jsPDF limitation for complex scripts, not a bug in this wiring.
-      let bodyFont = "helvetica";
-      if (language === "gu") {
-        const fontBase64 = await loadGujaratiFontBase64();
-        if (fontBase64) {
-          doc.addFileToVFS(GUJARATI_FONT_FILENAME, fontBase64);
-          doc.addFont(GUJARATI_FONT_FILENAME, GUJARATI_FONT_NAME, "normal");
-          bodyFont = GUJARATI_FONT_NAME;
-        }
-      }
-
-      const logoDataUrl = await loadAgencyLogoDataUrl();
-
-      const addHeading = (text: string) => {
-        if (y > 740) { doc.addPage(); y = 56; }
-        doc.setFont(bodyFont, bodyFont === "helvetica" ? "bold" : "normal");
-        doc.setFontSize(12);
-        doc.setTextColor(20, 20, 20);
-        doc.text(text, margin, y);
-        y += 18;
-      };
-
-      const addLine = (label: string, value: string) => {
-        if (y > 760) { doc.addPage(); y = 56; }
-        doc.setFont(bodyFont, bodyFont === "helvetica" ? "bold" : "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        doc.text(label, margin, y);
-        doc.setFont(bodyFont, "normal");
-        doc.setTextColor(20, 20, 20);
-        doc.text(value || "—", margin + 150, y);
-        y += 14;
-      };
-
-      const addParagraph = (text: string) => {
-        doc.setFont(bodyFont, "normal");
-        doc.setFontSize(9.5);
-        doc.setTextColor(30, 30, 30);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        for (const line of lines) {
-          if (y > 770) { doc.addPage(); y = 56; }
-          doc.text(line, margin, y);
-          y += 13;
-        }
-        y += 6;
-      };
-
-      // Letterhead
-      if (logoDataUrl) {
-        try { doc.addImage(logoDataUrl, "PNG", margin, y - 34, 34, 34); } catch { /* unsupported format — skip, never block export */ }
-      }
-      const textX = logoDataUrl ? margin + 44 : margin;
-      doc.setFont(bodyFont, bodyFont === "helvetica" ? "bold" : "normal");
-      doc.setFontSize(14);
-      doc.setTextColor(20, 20, 20);
-      doc.text(L.title, textX, y);
-      y += 15;
-      doc.setFont(bodyFont, "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(90, 90, 90);
-      doc.text(L.subtitle, textX, y);
-      y += 22;
-      doc.setDrawColor(200, 200, 200);
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 20;
-
-      addHeading(L.h1);
-      addParagraph(activeCase.narrativeSummary || L.noSummary(activeCase.name));
-      addLine(L.sample, activeCase.name);
-      addLine(L.fileType, txFileType(activeCase.type));
-      addLine(L.caseId, activeCase.id);
-      addLine(L.riskScore, `${activeCase.riskScore}/100`);
-      addLine(L.verdict, txStatus(activeCase.status.replace("_", " ")));
-      addLine(L.submitted, activeCase.date);
-      y += 8;
-
-      addHeading(L.h2);
-      addLine(L.sha256, activeCase.sha256 || activeCase.hash);
-      addLine(L.md5, activeCase.md5 || "—");
-      addLine(L.sha1, activeCase.sha1 || "—");
-      y += 8;
-
-      addHeading(L.h3);
-      if (yaraDetails.length === 0) {
-        addParagraph(L.noRuleMatches);
-      } else {
-        for (const m of yaraDetails) {
-          addParagraph(`• [${txSeverity(m.severity)}] ${m.rule_name}${language === "gu" ? "" : ` (${txCategory(m.category)})`}: ${txExplanation(m.description)}`);
-        }
-      }
-      if (packing) {
-        addParagraph(
-          packing.is_packed
-            ? L.packedYes(packing.packer_name) + (packing.unpack_succeeded ? L.unpackedYes : L.unpackedNo(packing.unpack_attempted, packing.unpack_error))
-            : L.packedNo
-        );
-      }
-      if (explainedStrings.length > 0) {
-        addParagraph(L.notableIndicators);
-        for (const s of explainedStrings.slice(0, 12)) {
-          addParagraph(`• ${s.value} — ${txExplanation(s.explanation)}`);
-        }
-      }
-      y += 8;
-
-      addHeading(L.h4);
-      const techniques = activeCase.mitreTechniques ?? [];
-      if (techniques.length === 0) {
-        addParagraph(L.noMitre);
-      } else {
-        for (const t of techniques) {
-          const conf = typeof t.confidence === "number" ? `${(t.confidence * 100).toFixed(0)}%` : "N/A";
-          addLine(`${t.technique_id} [${conf}]`, txMitre(t.technique_id, t.technique_name));
-        }
-      }
-      y += 8;
-
-      if (geoIocs.length > 0) {
-        addHeading(L.h4b);
-        for (const g of geoIocs) {
-          const place = [g.city, g.country].filter(Boolean).join(", ") || L.locationUnavailable;
-          addParagraph(`• ${g.ip} — ${place}`);
-        }
-        y += 4;
-
-        // 4c. Detailed Geo-IP Intelligence — one block per resolved IP with
-        // every field the MaxMind lookup returned (or a Gujarati/English
-        // "not available" placeholder when the field wasn't resolvable).
-        addHeading(L.h4c);
-        for (const g of geoIocs) {
-          if (y > 700) { doc.addPage(); y = 56; }
-          doc.setDrawColor(180, 180, 180);
-          doc.roundedRect(margin, y - 10, maxWidth, 1, 0, 0);
-          y += 6;
-          addLine(L.geoIpIp, g.ip);
-          addLine(L.geoIpCountry, g.country || L.geoIpNotAvailable);
-          addLine(L.geoIpCountryIso, g.country_iso || L.geoIpNotAvailable);
-          addLine(L.geoIpCity, g.city || L.geoIpNotAvailable);
-          addLine(L.geoIpRegion, g.region || L.geoIpNotAvailable);
-          addLine(L.geoIpPostal, g.postal_code || L.geoIpNotAvailable);
-          addLine(L.geoIpLatitude, g.latitude != null ? String(g.latitude) : L.geoIpNotAvailable);
-          addLine(L.geoIpLongitude, g.longitude != null ? String(g.longitude) : L.geoIpNotAvailable);
-          addLine(L.geoIpTimezone, g.timezone || L.geoIpNotAvailable);
-          addLine(L.geoIpAccuracy, g.accuracy_radius != null ? `${g.accuracy_radius} km` : L.geoIpNotAvailable);
-          addLine(L.geoIpAsn, g.asn != null ? `AS${g.asn}` : L.geoIpNotAvailable);
-          addLine(L.geoIpIsp, g.asn_org || g.isp || L.geoIpNotAvailable);
-          addLine(L.geoIpIsHosting, txYesNo(g.is_hosting));
-          addLine(L.geoIpIsProxy, txYesNo(g.is_proxy));
-          addLine(L.geoIpThreatLevel, g.threat_level || L.geoIpNotAvailable);
-          y += 6;
-        }
-      }
-
-      addHeading(L.h5);
-      const capabilityTags = activeCase.capabilityTags ?? [];
-      if (capabilityTags.length === 0) {
-        addParagraph(L.noCapability);
-      } else {
-        for (const c of capabilityTags) {
-          const evidence = Array.isArray(c.evidence)
-            ? c.evidence.map((e: string) => txEvidence(e)).join("; ")
-            : txEvidence(c.evidence);
-          const conf = typeof c.confidence === "number" ? `${(c.confidence * 100).toFixed(0)}%` : "N/A";
-          addParagraph(`• ${txCapability(c.capability)} [${conf}]: ${evidence}`);
-        }
-      }
-      y += 8;
-
-      addHeading(L.h6);
-      for (const rec of recommendations) {
-        addParagraph(`• ${rec}`);
-      }
-      y += 8;
-
-      addHeading(L.h7);
-      addLine(L.examiningOfficer, examinerName);
-      addLine(L.department, examinerDept);
-      addLine(L.reportGenerated, new Date().toISOString().replace("T", " ").substring(0, 19) + " UTC");
-      addParagraph(L.disclaimer);
-
-      // 8. Behavioral Timeline — a derived pipeline timeline (real sandbox
-      // event data isn't available for static-only cases, so the report
-      // shows the analysis stages that actually ran, with honest labeling).
-      addHeading(L.h8);
-      const timelineEvents = [
-        { time: activeCase.date, event: language === "gu" ? "નમૂનો સબમિટ કરાયો અને પ્રાપ્ત થયો" : "Sample submitted and received", sev: "info", desc: language === "gu" ? "આર્ટિફેક્ટ ઇન્જેસ્ટ થયું અને ફોરેન્સિક વિશ્લેષણ માટે નોંધાયું." : "Artifact ingested and registered for forensic analysis." },
-        { time: activeCase.date, event: language === "gu" ? "સ્ટેટિક વિશ્લેષણ શરૂ" : "Static analysis started", sev: "info", desc: language === "gu" ? "ફાઇલ પ્રકાર, હેશ અને માળખાકીય માહિતી એકત્રિત કરવામાં આવી." : "File type, hashes and structural metadata were collected." },
-        { time: activeCase.date, event: language === "gu" ? "શા-256 ફિંગરપ્રિન્ટિંગ" : "SHA-256 fingerprinting", sev: "info", desc: activeCase.sha256 || activeCase.hash },
-        { time: activeCase.date, event: language === "gu" ? "રૂલ-એન્જિન (YARA) સ્કેન" : "Rule-engine (YARA) scan", sev: yaraDetails.length ? "high" : "info", desc: `${yaraDetails.length} ${language === "gu" ? "મેચ" : "matches"}` },
-        { time: activeCase.date, event: language === "gu" ? "પેકિંગ વિશ્લેષણ" : "Packing analysis", sev: packing?.is_packed ? "high" : "info", desc: packing?.is_packed ? (language === "gu" ? "પેક/કમ્પ્રેસ્ડ મળ્યું" : "Packed/compressed detected") : (language === "gu" ? "પેક થયેલ નથી" : "Not packed") },
-        { time: activeCase.date, event: language === "gu" ? "સૂચક સ્ટ્રિંગ એક્સ્ટ્રેક્શન" : "Indicator string extraction", sev: explainedStrings.length ? "medium" : "info", desc: `${explainedStrings.length} ${language === "gu" ? "સૂચકો" : "indicators"}` },
-        { time: activeCase.date, event: language === "gu" ? "નેટવર્ક સૂચક ભૌગોલિક સ્થાન" : "Network indicator geolocation", sev: geoIocs.length ? "medium" : "info", desc: `${geoIocs.length} ${language === "gu" ? "આઈપી ઉકેલાયા" : "IPs resolved"}` },
-        { time: activeCase.date, event: language === "gu" ? "મિટ્રે ટેકનિક મેપિંગ" : "MITRE technique mapping", sev: techniques.length ? "medium" : "info", desc: `${techniques.length} ${language === "gu" ? "ટેકનિકો" : "techniques"}` },
-        { time: activeCase.date, event: language === "gu" ? "ક્ષમતા મૂલ્યાંકન" : "Capability assessment", sev: capabilityTags.length ? "high" : "info", desc: `${capabilityTags.length} ${language === "gu" ? "ક્ષમતાઓ" : "capabilities"}` },
-        { time: activeCase.date, event: language === "gu" ? "જોખમ સ્કોર ગણતરી" : "Risk score computed", sev: activeCase.riskScore >= 60 ? "critical" : activeCase.riskScore >= 25 ? "high" : "info", desc: `${activeCase.riskScore}/100` },
-        { time: new Date().toISOString().replace("T", " ").substring(0, 19) + " UTC", event: language === "gu" ? "અહેવાલ બનાવાયો" : "Report generated", sev: "info", desc: language === "gu" ? "સત્તાવાર ફોરેન્સિક અહેવાલ બનાવવામાં આવ્યો." : "Official forensic report produced." },
-      ];
-      if (language === "gu") {
-        addParagraph(L.behaviorNone);
-      }
-      for (const ev of timelineEvents) {
-        addLine(L.behaviorTime, ev.time);
-        addLine(L.behaviorEvent, ev.event);
-        addLine(L.behaviorSeverity, txSeverity(ev.sev));
-        addLine(L.behaviorDesc, ev.desc);
-        y += 2;
-      }
-      y += 8;
-
-      // 9. IOC & Threat Intelligence — the extracted indicators as a list.
-      addHeading(L.h9);
-      if (explainedStrings.length === 0 && geoIocs.length === 0) {
-        addParagraph(L.iocNone);
-      } else {
-        for (const s of explainedStrings) {
-          if (y > 730) { doc.addPage(); y = 56; }
-          addLine(L.iocType, txCategory(s.category));
-          addLine(L.iocValue, s.value);
-          addLine(L.iocContext, txExplanation(s.explanation));
-          addLine(L.iocContext, `${language === "gu" ? "ગંભીરતા" : "Severity"}: ${txSeverity(s.severity)}`);
-          y += 3;
-        }
-        for (const g of geoIocs) {
-          if (y > 730) { doc.addPage(); y = 56; }
-          const place = [g.city, g.country].filter(Boolean).join(", ") || L.locationUnavailable;
-          addLine(L.iocType, language === "gu" ? "આઈપી સૂચક" : "IP indicator");
-          addLine(L.iocValue, g.ip);
-          addLine(L.iocContext, place);
-          y += 3;
-        }
-      }
-      y += 8;
-
-      // 10. Evidence Chain & Appendix — integrity anchor + raw technical data.
-      addHeading(L.h10);
-      addParagraph(L.chainIntro);
-      addLine(L.chainSha256, activeCase.sha256 || activeCase.hash);
-      addLine(L.chainStatus, L.chainHashMatch);
-      addLine(L.chainValid, txYesNo(true));
-      y += 6;
-      addParagraph(L.appendixIntro);
-      if (yaraDetails.length > 0) {
-        addParagraph(L.appendixYara);
-        for (const m of yaraDetails) {
-          addParagraph(`• ${m.rule_name} [${txSeverity(m.severity)}]: ${txExplanation(m.description)}`);
-        }
-      }
-      if (explainedStrings.length > 0) {
-        addParagraph(L.appendixStrings);
-        for (const s of explainedStrings) {
-          addParagraph(`• ${s.value} (${txCategory(s.category)}) — ${txExplanation(s.explanation)}`);
-        }
-      }
-      if (geoIocs.length > 0) {
-        addParagraph(L.appendixGeo);
-        for (const g of geoIocs) {
-          const place = [g.city, g.country].filter(Boolean).join(", ") || L.locationUnavailable;
-          addParagraph(`• ${g.ip} — ${place}`);
-        }
-      }
-      if (techniques.length > 0) {
-        addParagraph(L.appendixMitre);
-        for (const t of techniques) {
-          addParagraph(`• ${t.technique_id} — ${txMitre(t.technique_id, t.technique_name)}`);
-        }
-      }
-      if (capabilityTags.length > 0) {
-        addParagraph(L.appendixCapabilities);
-        for (const c of capabilityTags) {
-          const evidence = Array.isArray(c.evidence)
-            ? c.evidence.map((e: string) => txEvidence(e)).join("; ")
-            : txEvidence(c.evidence);
-          addParagraph(`• ${txCapability(c.capability)}: ${evidence}`);
-        }
-      }
-
-      doc.setFont(bodyFont, "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(140, 140, 140);
-      doc.text(L.footer(activeCase.id, doc.getNumberOfPages()), margin, 800);
-
-      const safeName = (activeCase.name || "forensic_report").replace(/[^\w.-]+/g, "_");
-      const filename = `${safeName}_SentinelScan_Report_${language}.pdf`;
-      const blob = doc.output("blob");
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-
-      setIsExporting(false);
+      // The browser shapes Gujarati before jsPDF embeds the rendered pages.
+      await generateForensicPDF(activeCase, examiner, language);
       setExportDone(true);
       setTimeout(() => setExportDone(false), 2500);
-    } catch (err) {
-      setIsExporting(false);
+    } catch {
       setExportError("Failed to generate PDF report. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
-
   const bookmarks = [
     { id: "summary", label: "1. Case Summary" },
-    { id: "static", label: "2-3. Identification & Findings" },
-    { id: "mitre", label: "4-5. MITRE & Capabilities" },
-    { id: "examiner", label: "6-7. Recommendations & Examiner" },
+    { id: "timeline", label: "2. Evidence Timeline" },
+    { id: "ai_analysis", label: "3. AI Analysis" },
+    { id: "static", label: "4-5. Identification & Findings" },
+    { id: "mitre", label: "6-7. MITRE & Capabilities" },
+    { id: "examiner", label: "8-9. Recommendations & Examiner" },
   ];
 
   return (
@@ -891,6 +417,37 @@ export function AiReportsTab({ activeCase, examiner }: AiReportsTabProps) {
               <h4 className="text-white text-xs font-bold uppercase tracking-wider border-l-2 border-[#16ff4d] pl-2 font-mono flex items-center gap-2">
                 <ScrollText className="w-3.5 h-3.5" /> 1. Case Summary
               </h4>
+
+              {/* Threat Assessment Badges */}
+              {activeCase.threatAssessment && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className={`px-2.5 py-1 rounded text-[9px] font-mono font-bold uppercase border ${
+                    activeCase.threatAssessment.threat_level === "SEVERE" ? "bg-red-950/50 border-red-400/30 text-red-300" :
+                    activeCase.threatAssessment.threat_level === "CRITICAL" ? "bg-red-950/40 border-red-500/20 text-[#ff4040]" :
+                    activeCase.threatAssessment.threat_level === "HIGH" ? "bg-yellow-950/40 border-yellow-500/20 text-[#f4b400]" :
+                    activeCase.threatAssessment.threat_level === "MEDIUM" ? "bg-yellow-950/20 border-yellow-500/10 text-yellow-400" :
+                    "bg-green-950/40 border-green-500/20 text-[#16ff4d]"
+                  }`}>{activeCase.threatAssessment.threat_level}</span>
+                  <span className={`px-2.5 py-1 rounded text-[9px] font-mono font-bold uppercase border ${
+                    activeCase.threatAssessment.verdict === "MALICIOUS" ? "bg-red-950/40 border-red-500/20 text-[#ff4040]" :
+                    activeCase.threatAssessment.verdict === "SUSPICIOUS" ? "bg-yellow-950/40 border-yellow-500/20 text-[#f4b400]" :
+                    "bg-green-950/40 border-green-500/20 text-[#16ff4d]"
+                  }`}>{activeCase.threatAssessment.verdict}</span>
+                  <span className="px-2.5 py-1 rounded text-[9px] font-mono border border-[#222222] text-[#A0A0A0]">
+                    Confidence: <span className="text-white font-bold">{activeCase.threatAssessment.confidence}%</span>
+                  </span>
+                  {activeCase.aiAnalysis && (
+                    <span className={`px-2 py-1 rounded text-[8px] font-mono border ${
+                      activeCase.aiAnalysis.ai_available
+                        ? "border-[#16ff4d]/30 text-[#16ff4d] bg-[#16ff4d]/5"
+                        : "border-[#f4b400]/30 text-[#f4b400] bg-[#f4b400]/5"
+                    }`}>
+                      {activeCase.aiAnalysis.ai_available ? "AI: ACTIVE" : "AI: FALLBACK"}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {activeCase.narrativeSummary ? (
                 <p className="text-xs leading-relaxed font-sans font-light">{activeCase.narrativeSummary}</p>
               ) : (
@@ -902,10 +459,205 @@ export function AiReportsTab({ activeCase, examiner }: AiReportsTabProps) {
                 <p><span className="text-white font-bold">Sample:</span> {activeCase.name}</p>
                 <p><span className="text-white font-bold">File type:</span> {activeCase.type}</p>
                 <p><span className="text-white font-bold">Risk score:</span> <span className="text-[#ff4040] font-bold">{activeCase.riskScore}/100</span></p>
-                <p><span className="text-white font-bold">Verdict:</span> <span className="text-[#ff4040] font-bold">{activeCase.status.replace('_', ' ')}</span></p>
+                <p><span className="text-white font-bold">Verdict:</span> <span className="text-[#ff4040] font-bold">{activeCase.threatAssessment?.verdict || activeCase.status.replace('_', ' ')}</span></p>
                 <p><span className="text-white font-bold">MITRE techniques:</span> {activeCase.mitreCount}</p>
                 <p><span className="text-white font-bold">Rule engine matches:</span> {yaraDetails.length}</p>
               </div>
+
+              {(activeCase.riskExplanation?.contributions ?? []).length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest block font-bold">RISK SCORE EXPLANATION</span>
+                  {activeCase.riskExplanation!.contributions.map((part, index) => (
+                    <p key={`${part.label}-${index}`} className="text-[11px] font-mono flex justify-between gap-3 border-b border-[#222222] pb-1">
+                      <span>{part.label}</span><span className="text-[#f4b400] font-bold">+{part.points}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Key Findings */}
+              {(activeCase.threatAssessment?.key_findings ?? []).length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest block font-bold">KEY FINDINGS</span>
+                  {activeCase.threatAssessment!.key_findings.map((f, i) => (
+                    <p key={i} className="text-[11px] font-sans font-light flex gap-2">
+                      <span className="text-[#ff4040] shrink-0">▸</span> {f}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {(activeCase.evidenceCorrelation ?? []).length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest block font-bold">CORRELATED EVIDENCE</span>
+                  {activeCase.evidenceCorrelation!.slice(0, 4).map((item: any, index) => (
+                    <div key={`${item.finding}-${index}`} className="bg-[#090909] border border-[#222222] rounded p-2 text-[10px] font-mono">
+                      <span className="text-white">{item.finding}</span><br />
+                      <span className="text-[#6F6F6F]">{item.evidence_state || item.correlation} · {item.confidence}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeBookmark === "timeline" && (
+            <div className="space-y-4">
+              <h4 className="text-white text-xs font-bold uppercase tracking-wider border-l-2 border-[#00c2ff] pl-2 font-mono flex items-center gap-2">
+                <ListChecks className="w-3.5 h-3.5" /> 2. Analysis Evidence Timeline
+              </h4>
+              {(activeCase.evidenceTimeline ?? []).length > 0 ? (
+                <div className="space-y-2">
+                  {activeCase.evidenceTimeline!.map((event: any, index) => (
+                    <div key={`${event.timestamp}-${event.event}-${index}`} className="grid grid-cols-[110px_1fr] gap-3 rounded border border-[#222222] bg-[#090909] p-3 text-[10px] font-mono">
+                      <span className="text-[#00c2ff] break-all">{event.timestamp || "NOT AVAILABLE"}</span>
+                      <div><p className="text-white font-bold">{event.event || "Evidence event"}</p><p className="text-[#A0A0A0] mt-1">{event.source || "Unknown source"} · {event.indicator || "No indicator"} · {event.severity || "INFO"}</p></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs leading-relaxed font-sans font-light">No timestamped evidence is available for this case. Timeline entries are generated only from actual analysis and sandbox events.</p>
+              )}
+            </div>
+          )}
+
+          {activeBookmark === "ai_analysis" && (
+            <div className="space-y-5">
+              <h4 className="text-white text-xs font-bold uppercase tracking-wider border-l-2 border-[#00c2ff] pl-2 font-mono flex items-center gap-2">
+                <Cpu className="w-3.5 h-3.5" /> 2. AI Analysis — Real Evidence Correlation
+              </h4>
+
+              {activeCase.aiAnalysis ? (
+                <>
+                  {activeCase.aiAnalysis.fallback_used && (
+                    <div className="p-3 rounded border border-[#f4b400]/30 bg-[#f4b400]/5 text-[10px] font-mono text-[#f4b400]">
+                      ⚠ AI model unavailable or GROQ_API_KEY not configured — showing template fallback. Set GROQ_API_KEY in .env for full AI analysis.
+                    </div>
+                  )}
+
+                  {/* Executive Summary */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">EXECUTIVE SUMMARY</span>
+                    <p className="text-xs leading-relaxed font-sans font-light">{activeCase.aiAnalysis.executive_summary}</p>
+                  </div>
+
+                  {/* Malware Behavior */}
+                  {activeCase.aiAnalysis.malware_behavior && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">MALWARE BEHAVIOR</span>
+                      <p className="text-xs leading-relaxed font-sans font-light">{activeCase.aiAnalysis.malware_behavior}</p>
+                    </div>
+                  )}
+
+                  {/* Evidence Correlation */}
+                  {activeCase.aiAnalysis.evidence_correlation && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">EVIDENCE CORRELATION</span>
+                      <p className="text-xs leading-relaxed font-sans font-light">{activeCase.aiAnalysis.evidence_correlation}</p>
+                    </div>
+                  )}
+
+                  {/* Network Intelligence Interpretation */}
+                  {activeCase.aiAnalysis.network_interpretation && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">NETWORK INTELLIGENCE</span>
+                      <p className="text-xs leading-relaxed font-sans font-light">{activeCase.aiAnalysis.network_interpretation}</p>
+                      {activeCase.networkIndicators && (
+                        <div className="grid grid-cols-3 gap-2 font-mono text-[9px] mt-1">
+                          <div className="bg-[#090909] p-2 rounded border border-[#222222] text-center">
+                            <span className="text-[#00c2ff] font-bold block text-base">{activeCase.networkIndicators.ips.length}</span>
+                            <span className="text-[#6F6F6F]">IPs</span>
+                          </div>
+                          <div className="bg-[#090909] p-2 rounded border border-[#222222] text-center">
+                            <span className="text-[#00c2ff] font-bold block text-base">{activeCase.networkIndicators.domains.length}</span>
+                            <span className="text-[#6F6F6F]">Domains</span>
+                          </div>
+                          <div className="bg-[#090909] p-2 rounded border border-[#222222] text-center">
+                            <span className="text-[#00c2ff] font-bold block text-base">{activeCase.networkIndicators.urls.length}</span>
+                            <span className="text-[#6F6F6F]">URLs</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Geo-IP Interpretation */}
+                  {activeCase.aiAnalysis.geoip_interpretation && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">GEO-IP INTELLIGENCE</span>
+                      <p className="text-xs leading-relaxed font-sans font-light">{activeCase.aiAnalysis.geoip_interpretation}</p>
+                      {(activeCase.geoIocs ?? []).length > 0 && (
+                        <div className="space-y-1">
+                          {(activeCase.geoIocs ?? []).map((g, i) => (
+                            <div key={i} className="bg-[#090909] p-2.5 rounded border border-[#222222] font-mono text-[10px] flex justify-between items-center gap-4">
+                              <span className="text-[#00c2ff] font-bold">{g.ip}</span>
+                              <span className="text-[#A0A0A0] font-sans">
+                                {[g.city, g.region, g.country].filter(Boolean).join(", ") || "location unavailable"}
+                                {g.isp ? ` · ${g.isp}` : ""}
+                                {g.is_proxy ? " · 🔴 Proxy" : ""}
+                                {g.is_hosting ? " · ☁ Hosting" : ""}
+                              </span>
+                            </div>
+                          ))}
+                          <p className="text-[8px] text-[#6F6F6F] font-mono italic pt-1">
+                            ⚠ {(activeCase.geoIocs ?? [])[0]?.disclaimer ?? "Geo-IP is an approximate geographic estimate and not an exact physical location."}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MITRE Techniques Explained */}
+                  {(activeCase.aiAnalysis.mitre_techniques_explained ?? []).length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">MITRE ATT&CK TECHNIQUES (EVIDENCE-BASED)</span>
+                      <div className="space-y-1 font-mono text-[10px]">
+                        {activeCase.aiAnalysis.mitre_techniques_explained.map((t, i) => (
+                          <p key={i} className="flex gap-2">
+                            <span className="text-[#f4b400] shrink-0">▸</span>
+                            <span className="text-[#A0A0A0]">{t}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {(activeCase.aiAnalysis.recommendations ?? []).length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-[#6F6F6F] uppercase tracking-widest font-bold block">INVESTIGATION RECOMMENDATIONS (AI-DERIVED)</span>
+                      <div className="space-y-1.5">
+                        {activeCase.aiAnalysis.recommendations.map((r, i) => (
+                          <p key={i} className="text-[11px] font-sans font-light flex gap-2">
+                            <span className="text-[#16ff4d] shrink-0">•</span> {r}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confidence */}
+                  <div className="pt-3 border-t border-[#222222] flex items-center justify-between font-mono text-[10px]">
+                    <span className="text-[#6F6F6F]">AI Analysis Confidence</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 h-1.5 bg-[#222222] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            activeCase.aiAnalysis.confidence >= 70 ? "bg-[#16ff4d]" :
+                            activeCase.aiAnalysis.confidence >= 40 ? "bg-[#f4b400]" : "bg-[#ff4040]"
+                          }`}
+                          style={{ width: `${activeCase.aiAnalysis.confidence}%` }}
+                        />
+                      </div>
+                      <span className="text-white font-bold">{activeCase.aiAnalysis.confidence}%</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 rounded border border-[#222222] text-[11px] font-mono text-[#6F6F6F]">
+                  AI analysis data not yet available for this case. Run a fresh analysis to generate it.
+                </div>
+              )}
             </div>
           )}
 

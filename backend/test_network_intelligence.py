@@ -24,7 +24,6 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from uuid import uuid4
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -43,7 +42,7 @@ logging.basicConfig(
 _LOGGER = logging.getLogger(__name__)
 
 
-async def test_with_pcap(pcap_file: str):
+async def run_pcap_test(pcap_file: str):
     """Test network intelligence with a PCAP file."""
     _LOGGER.info(f"Testing network intelligence with PCAP file: {pcap_file}")
 
@@ -98,7 +97,7 @@ async def test_with_pcap(pcap_file: str):
         await db.close()
 
 
-async def test_live_capture(interface: str, duration: int):
+async def run_live_capture_test(interface: str, duration: int):
     """Test network intelligence with live capture."""
     _LOGGER.info(f"Testing network intelligence with live capture on {interface} for {duration}s")
 
@@ -139,7 +138,7 @@ async def test_live_capture(interface: str, duration: int):
         await db.close()
 
 
-async def test_list_interfaces():
+async def run_list_interfaces_test():
     """Test listing available network interfaces."""
     from app.network_intelligence.capture import PacketCapture
 
@@ -159,14 +158,14 @@ async def main():
     args = parser.parse_args()
 
     if args.list_interfaces:
-        await test_list_interfaces()
+        await run_list_interfaces_test()
     elif args.pcap_file:
         if not Path(args.pcap_file).exists():
             _LOGGER.error(f"PCAP file not found: {args.pcap_file}")
             sys.exit(1)
-        await test_with_pcap(args.pcap_file)
+        await run_pcap_test(args.pcap_file)
     elif args.interface:
-        await test_live_capture(args.interface, args.duration)
+        await run_live_capture_test(args.interface, args.duration)
     else:
         parser.print_help()
         sys.exit(1)

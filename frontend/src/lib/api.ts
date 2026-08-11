@@ -7,6 +7,7 @@ export interface CaseSummary {
   risk_score: number;
   status: string;
   submitted_at: string;
+  original_filename?: string | null;
 }
 
 export interface MitreTechnique {
@@ -65,6 +66,43 @@ export interface GeoIocDetail {
   is_hosting: boolean | null;
   is_proxy: boolean | null;
   threat_level: string | null;
+  disclaimer: string | null;
+}
+
+export interface NetworkIndicators {
+  ips: string[];
+  domains: string[];
+  urls: string[];
+  dns_queries: string[];
+  connections: Array<{
+    ip: string;
+    port: number | null;
+    protocol: string;
+    flagged_c2: boolean;
+  }>;
+}
+
+export interface ThreatAssessment {
+  risk_score: number;
+  threat_level: string;  // LOW | MEDIUM | HIGH | CRITICAL | SEVERE
+  verdict: string;       // CLEAN | SUSPICIOUS | MALICIOUS
+  confidence: number;    // 0-100
+  key_findings: string[];
+}
+
+export interface AiAnalysisOutput {
+  executive_summary: string;
+  malware_behavior: string | null;
+  evidence_correlation: string | null;
+  threat_classification: string | null;
+  network_interpretation: string | null;
+  geoip_interpretation: string | null;
+  mitre_techniques_explained: string[];
+  confidence: number;
+  reasoning: string | null;
+  recommendations: string[];
+  ai_available: boolean;
+  fallback_used: boolean;
 }
 
 export interface CaseDetail {
@@ -85,6 +123,54 @@ export interface CaseDetail {
   packing: PackingInfo | null;
   explained_strings: ExplainedStringDetail[];
   geo_iocs: GeoIocDetail[];
+  original_filename?: string | null;
+  mime_type?: string | null;
+  analysis_status?: string | null;
+  dynamic_analysis?: DynamicAnalysis | null;
+  // Part 2: Network Intelligence, Threat Assessment, AI Analysis
+  network_indicators?: NetworkIndicators | null;
+  threat_assessment?: ThreatAssessment | null;
+  ai_analysis?: AiAnalysisOutput | null;
+  ioc_intelligence?: Record<string, unknown>[];
+  evidence_correlation?: Record<string, unknown>[];
+  evidence_timeline?: Record<string, unknown>[];
+  risk_explanation?: {
+    score: number;
+    contributions: Array<{ label: string; points: number }>;
+    method: string;
+  } | null;
+}
+
+
+export interface DynamicAnalysis {
+  available: boolean;
+  status: string;
+  message?: string;
+  task_id?: string | null;
+  sandbox_url?: string | null;
+}
+
+export interface AnalysisStartResponse {
+  analysis_id: string;
+  sample_id: string;
+  original_filename: string;
+  file_type: string;
+  mime_type: string;
+  sha256: string;
+  file_size_bytes: number;
+  status: string;
+  stage?: string | null;
+  message?: string | null;
+}
+
+export interface AnalysisStatus {
+  analysis_id: string;
+  status: string;
+  stage?: string | null;
+  dynamic_status?: string | null;
+  error?: string | null;
+  file_type?: string | null;
+  updated_at?: string | null;
 }
 
 export interface HealthResponse {
@@ -119,6 +205,28 @@ export async function login(email: string, password: string): Promise<string> {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || "Authentication failed. Invalid agency credentials.");
+  }
+
+  const data = await res.json();
+  localStorage.setItem("sentinel_access_token", data.access_token);
+  return data.access_token;
+}
+
+export async function register(
+  email: string,
+  password: string,
+  fullName: string,
+  department?: string
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, full_name: fullName, department }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Registration failed. Unable to create agency account.");
   }
 
   const data = await res.json();
@@ -196,7 +304,7 @@ export async function fetchCaseDetail(sampleId: string): Promise<CaseDetail> {
   return res.json();
 }
 
-export async function uploadSample(file: File): Promise<CaseDetail> {
+export async function uploadSample(file: File): Promise<AnalysisStartResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -211,5 +319,18 @@ export async function uploadSample(file: File): Promise<CaseDetail> {
     throw new Error(err.detail || "Sample analysis failed.");
   }
 
+  return res.json();
+}
+
+export async function fetchAnalysisStatus(analysisId: string): Promise<AnalysisStatus> {
+  const res = await fetch(`${API_BASE}/cases/${analysisId}/status`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error("Analysis not found");
+    }
+    throw new Error("Failed to fetch analysis status");
+  }
   return res.json();
 }

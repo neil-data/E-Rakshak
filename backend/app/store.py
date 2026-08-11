@@ -88,6 +88,17 @@ def _row_to_case(case_row, mitre_rows, cap_rows) -> dict:
         "packing": raw_findings.get("packing"),
         "explained_strings": raw_findings.get("explained_strings", []),
         "geo_iocs": raw_findings.get("geo_iocs", []),
+        "network_indicators": raw_findings.get("network_indicators"),
+        "threat_assessment": raw_findings.get("threat_assessment"),
+        "ai_analysis": raw_findings.get("ai_analysis"),
+        "ioc_intelligence": raw_findings.get("ioc_intelligence", []),
+        "evidence_correlation": raw_findings.get("evidence_correlation", []),
+        "evidence_timeline": raw_findings.get("evidence_timeline", []),
+        "risk_explanation": raw_findings.get("risk_explanation"),
+        "original_filename": case_row["original_filename"] if "original_filename" in case_row.keys() else None,
+        "mime_type": case_row["mime_type"] if "mime_type" in case_row.keys() else None,
+        "analysis_status": case_row["analysis_status"] if "analysis_status" in case_row.keys() else None,
+        "dynamic_analysis": raw_findings.get("dynamic_analysis"),
         "mitre_techniques": [
             {"technique_id": r["technique_id"], "technique_name": r["technique_name"], "confidence": float(r["confidence"])}
             for r in mitre_rows
@@ -121,31 +132,44 @@ async def save_case(sample_id: str, case_data: dict, event_type: str = "static_a
                 "packing": case_data.get("packing"),
                 "explained_strings": case_data.get("explained_strings", []),
                 "geo_iocs": case_data.get("geo_iocs", []),
+                "dynamic_analysis": case_data.get("dynamic_analysis"),
+                "network_indicators": case_data.get("network_indicators"),
+                "threat_assessment": case_data.get("threat_assessment"),
+                "ai_analysis": case_data.get("ai_analysis"),
+                "ioc_intelligence": case_data.get("ioc_intelligence", []),
+                "evidence_correlation": case_data.get("evidence_correlation", []),
+                "evidence_timeline": case_data.get("evidence_timeline", []),
+                "risk_explanation": case_data.get("risk_explanation"),
             })
             await conn.execute(
                 text(
                     "INSERT INTO cases "
                     "(sample_id, platform, file_type, file_size_bytes, risk_score, status, narrative_summary, "
-                    "submitted_at, sha256, md5, sha1, raw_findings) "
+                    "submitted_at, sha256, md5, sha1, raw_findings, original_filename, mime_type, analysis_status) "
                     "VALUES (:sample_id, :platform, :file_type, :file_size_bytes, :risk_score, :status, :narrative_summary, "
-                    ":submitted_at, :sha256, :md5, :sha1, :raw_findings::jsonb) "
+                    ":submitted_at, :sha256, :md5, :sha1, CAST(:raw_findings AS jsonb), :original_filename, :mime_type, :analysis_status) "
                     "ON CONFLICT (sample_id) DO UPDATE SET "
                     "risk_score = EXCLUDED.risk_score, status = EXCLUDED.status, "
-                    "narrative_summary = EXCLUDED.narrative_summary, raw_findings = EXCLUDED.raw_findings, updated_at = now()"
+                    "narrative_summary = EXCLUDED.narrative_summary, raw_findings = EXCLUDED.raw_findings, "
+                    "original_filename = EXCLUDED.original_filename, mime_type = EXCLUDED.mime_type, "
+                    "analysis_status = EXCLUDED.analysis_status, updated_at = now()"
                 ),
                 {
-                    "sample_id": sample_id,
-                    "platform": case_data.get("platform"),
-                    "file_type": case_data.get("file_type"),
+                    "sample_id": str(sample_id),
+                    "platform": str(case_data.get("platform") or "windows"),
+                    "file_type": str(case_data.get("file_type") or "exe"),
                     "file_size_bytes": case_data.get("file_size_bytes"),
                     "risk_score": case_data.get("risk_score"),
-                    "status": case_data.get("status"),
-                    "narrative_summary": case_data.get("narrative_summary"),
-                    "submitted_at": case_data.get("submitted_at"),
-                    "sha256": case_data.get("sha256"),
-                    "md5": case_data.get("md5"),
-                    "sha1": case_data.get("sha1"),
+                    "status": str(case_data.get("status") or "clean"),
+                    "narrative_summary": str(case_data.get("narrative_summary") or ""),
+                    "submitted_at": str(case_data.get("submitted_at") or ""),
+                    "sha256": str(case_data.get("sha256")) if case_data.get("sha256") is not None else str(sample_id),
+                    "md5": str(case_data.get("md5")) if case_data.get("md5") is not None else None,
+                    "sha1": str(case_data.get("sha1")) if case_data.get("sha1") is not None else None,
                     "raw_findings": raw_findings,
+                    "original_filename": case_data.get("original_filename"),
+                    "mime_type": case_data.get("mime_type"),
+                    "analysis_status": case_data.get("analysis_status"),
                 },
             )
 
@@ -221,7 +245,8 @@ async def list_cases() -> list[dict]:
             rows = (
                 await conn.execute(
                     text(
-                        "SELECT sample_id, platform, file_type, risk_score, status, submitted_at "
+                        "SELECT sample_id, platform, file_type, risk_score, status, submitted_at, "
+                        "original_filename, file_size_bytes, analysis_status "
                         "FROM cases ORDER BY submitted_at DESC"
                     )
                 )
@@ -234,6 +259,9 @@ async def list_cases() -> list[dict]:
                     "risk_score": r["risk_score"],
                     "status": r["status"],
                     "submitted_at": r["submitted_at"].isoformat() if hasattr(r["submitted_at"], "isoformat") else r["submitted_at"],
+                    "original_filename": r["original_filename"],
+                    "file_size_bytes": r["file_size_bytes"],
+                    "analysis_status": r["analysis_status"],
                 }
                 for r in rows
             ]

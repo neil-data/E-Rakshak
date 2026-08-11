@@ -1,4 +1,4 @@
-import { YaraMatchDetail, PackingInfo, ExplainedStringDetail, GeoIocDetail } from "../../lib/api";
+import { YaraMatchDetail, PackingInfo, ExplainedStringDetail, GeoIocDetail, NetworkIndicators, ThreatAssessment, AiAnalysisOutput } from "../../lib/api";
 
 export interface ThreatCase {
   id: string;
@@ -23,4 +23,16 @@ export interface ThreatCase {
   packing?: PackingInfo | null;
   explainedStrings?: ExplainedStringDetail[];
   geoIocs?: GeoIocDetail[];
+  // Part 2: Network Intelligence, Threat Assessment, AI Analysis
+  networkIndicators?: NetworkIndicators | null;
+  threatAssessment?: ThreatAssessment | null;
+  aiAnalysis?: AiAnalysisOutput | null;
+  iocIntelligence?: Record<string, unknown>[];
+  evidenceCorrelation?: Record<string, unknown>[];
+  evidenceTimeline?: Record<string, unknown>[];
+  riskExplanation?: {
+    score: number;
+    contributions: Array<{ label: string; points: number }>;
+    method: string;
+  } | null;
 }
