@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.jpeg" alt="SentinelScan Logo" width="120" />
+<img src="assets/GJ Police.png" alt="SentinelScan Logo" width="120" />
 
 # 🛡️ SentinelScan
 
