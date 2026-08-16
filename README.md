@@ -71,21 +71,40 @@ Several teams are building against the same PS. Our locked differentiators:
 
 ## 🏗️ Architecture
 
-Six-layer pipeline — full diagram at [`infra/PS4_Architecture.drawio`](./infra/PS4_Architecture.drawio) (open in [diagrams.net](https://app.diagrams.net)):
+<div align="center">
+<img src="docs/ps4.png" alt="SentinelScan System Architecture" width="850" />
+
+<sub>Full editable diagram at <a href="./infra/PS4_Architecture.drawio"><code>infra/PS4_Architecture.drawio</code></a> (open in <a href="https://app.diagrams.net">diagrams.net</a>)</sub>
+</div>
+
+Six-layer pipeline, ingestion to investigator-ready output:
 
 ```
-Ingestion & Isolation Layer
-        ↓
-Static Analysis Engine          (APK/PE modules, YARA, ML classifier)
-        ↓
-Dynamic / Sandbox Analysis      (KVM + CAPE on GCP, Android-x86 + Frida, INetSim)
-        ↓
-Behavioral Correlation & Agentic Reasoning   ← differentiator layer
-   (LangGraph Orchestrator → MITRE Mapper → Capability Classifier → Narrative Agent)
-        ↓
-Storage & Serving               (PostgreSQL, Elasticsearch, Redis)
-        ↓
-Output                          (React Dashboard, IOC Export, Signed PDF Report)
+ ┌──────────────────────────────┐
+ │  Ingestion & Isolation Layer │
+ └───────────────┬───────────────┘
+                  ▼
+ ┌──────────────────────────────┐
+ │   Static Analysis Engine      │  APK/PE modules · YARA · ML classifier
+ └───────────────┬───────────────┘
+                  ▼
+ ┌──────────────────────────────┐
+ │  Dynamic / Sandbox Analysis   │  KVM + CAPE on GCP · Android-x86 + Frida · INetSim
+ └───────────────┬───────────────┘
+                  ▼
+ ┌──────────────────────────────┐
+ │ Behavioral Correlation &      │  ★ differentiator layer
+ │ Agentic Reasoning              │  LangGraph Orchestrator → MITRE Mapper →
+ │                                │  Capability Classifier → Narrative Agent
+ └───────────────┬───────────────┘
+                  ▼
+ ┌──────────────────────────────┐
+ │  Storage & Serving             │  PostgreSQL · Elasticsearch · Redis
+ └───────────────┬───────────────┘
+                  ▼
+ ┌──────────────────────────────┐
+ │  Output                        │  React Dashboard · IOC Export · Signed PDF Report
+ └──────────────────────────────┘
 ```
 
 **Deployment model:** two-plane architecture — a public **Control Plane** (dashboard/API, port 443 only) and an isolated **Detonation Plane** (GCP `n2-standard-4`, nested virtualization, KVM/CAPE, network-contained via INetSim). See [Deployment](#-deployment).
@@ -160,12 +179,28 @@ ps4-malware-suite/
 
 ## 🚀 Getting Started
 
-**Backend / infra**
+**Infra — Postgres / Redis / Elasticsearch**
 
 ```bash
 cp .env.example .env      # fill in GROQ_API_KEY, NVIDIA_NIM_API_KEY, GCP project details
 docker-compose up -d      # Postgres + Redis + Elasticsearch
 ```
+
+**Backend API — Docker** *(build context is the repo root)*
+
+```bash
+docker build -f backend/Dockerfile -t sentinelscan-backend .
+docker run --env-file .env -p 8000:8000 sentinelscan-backend
+```
+
+**Backend API — local (without Docker)**
+
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+API docs available at `http://localhost:8000/docs` once running.
 
 **Agent orchestrator** (standalone test)
 
