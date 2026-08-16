@@ -302,20 +302,29 @@ Planned capabilities:
 - Correlation with locally generated IOCs
 - Enrichment of the final investigation report
 - Clear distinction between locally generated findings and external
-threat-intelligence findings
+threat-intelligence findingg
 
-Planned workflow:
+### Automated C2 Infrastructure & Network Fingerprinting
 
-Sample
-   ↓
-SHA-256 Hash
-   ↓
-Local Static Analysis
-   ↓
-MalwareBazaar Threat Intelligence Lookup
-   ↓
-Correlate External + Local Findings
-   ↓
-Enhanced Risk Assessment
-   ↓
-Investigator Report
+Integrate Nmap-based network intelligence to automatically enrich
+suspected Command-and-Control (C2) indicators identified during static
+and dynamic malware analysis.
+
+When a suspected C2 IP address is identified, SentinelScan will be able
+to perform an authorized network scan in the controlled analysis
+environment and correlate the results with the malware investigation.
+
+Planned capabilities:
+
+- Automatically extract suspected C2 IPs from static and dynamic analysis
+- Validate and normalize discovered IP indicators
+- Perform authorized Nmap service discovery
+- Identify reachable TCP/UDP services
+- Detect service names and versions where available
+- Perform OS/device fingerprinting where supported
+- Resolve hostnames where available
+- Collect network exposure information
+- Correlate discovered ports/services with malware behavior
+- Store network intelligence with the investigation case
+- Display C2 infrastructure information in the investigator dashboard
+- Include network findings in the final investigation report
