@@ -107,9 +107,7 @@ MITRE mapping. **A new fraud pattern needs a rule file and no Python change.**
 
 - Pipeline extended from 9 steps to 14 (signatures, indicators, entropy,
   classification, persistence).
-- Container-aware scanning: per-member for attribution, plus a combined view
-  so cross-member rules still fire (permissions live in the manifest,
-  behaviour in the DEX).
+- Container-aware scanning: compressed APK/ZIP members are decompressed and scanned individually      for attribution, while a combined view allows cross-member rules to fire (for example,              permissions in the manifest and behaviour in the DEX)..
 - `AnalyzerRegistry` settings defaulted; `create_engine()` wires storage and an
   optional rule directory.
 
