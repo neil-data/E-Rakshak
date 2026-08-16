@@ -79,33 +79,12 @@ Several teams are building against the same PS. Our locked differentiators:
 
 Six-layer pipeline, ingestion to investigator-ready output:
 
-```
- ┌──────────────────────────────┐
- │  Ingestion & Isolation Layer │
- └───────────────┬───────────────┘
-                  ▼
- ┌──────────────────────────────┐
- │   Static Analysis Engine      │  APK/PE modules · YARA · ML classifier
- └───────────────┬───────────────┘
-                  ▼
- ┌──────────────────────────────┐
- │  Dynamic / Sandbox Analysis   │  KVM + CAPE on GCP · Android-x86 + Frida · INetSim
- └───────────────┬───────────────┘
-                  ▼
- ┌──────────────────────────────┐
- │ Behavioral Correlation &      │  ★ differentiator layer
- │ Agentic Reasoning              │  LangGraph Orchestrator → MITRE Mapper →
- │                                │  Capability Classifier → Narrative Agent
- └───────────────┬───────────────┘
-                  ▼
- ┌──────────────────────────────┐
- │  Storage & Serving             │  PostgreSQL · Elasticsearch · Redis
- └───────────────┬───────────────┘
-                  ▼
- ┌──────────────────────────────┐
- │  Output                        │  React Dashboard · IOC Export · Signed PDF Report
- └──────────────────────────────┘
-```
+1. **Ingestion & Isolation Layer**
+2. **Static Analysis Engine** — APK/PE modules · YARA · ML classifier
+3. **Dynamic / Sandbox Analysis** — KVM + CAPE on GCP · Android-x86 + Frida · INetSim
+4. **Behavioral Correlation & Agentic Reasoning** ★ *differentiator layer* — LangGraph Orchestrator → MITRE Mapper → Capability Classifier → Narrative Agent
+5. **Storage & Serving** — PostgreSQL · Elasticsearch · Redis
+6. **Output** — React Dashboard · IOC Export · Signed PDF Report
 
 **Deployment model:** two-plane architecture — a public **Control Plane** (dashboard/API, port 443 only) and an isolated **Detonation Plane** (GCP `n2-standard-4`, nested virtualization, KVM/CAPE, network-contained via INetSim). See [Deployment](#-deployment).
 
@@ -186,12 +165,14 @@ cp .env.example .env      # fill in GROQ_API_KEY, NVIDIA_NIM_API_KEY, GCP projec
 docker-compose up -d      # Postgres + Redis + Elasticsearch
 ```
 
-**Backend API — Docker** *(build context is the repo root)*
+**Backend API — Docker (via docker-compose)**
 
 ```bash
-docker build -f backend/Dockerfile -t sentinelscan-backend .
-docker run --env-file .env -p 8000:8000 sentinelscan-backend
+# .env must set JWT_SECRET_KEY (generate: python -c "import secrets; print(secrets.token_urlsafe(48))")
+docker-compose up -d --build backend
 ```
+
+Runs on host port **8001** (mapped from container `8000`) — compose reserves `8000` for the `mobsf` service. This also wires `DATABASE_URL`, `REDIS_URL`, and `ELASTICSEARCH_URL` to the `postgres`, `redis`, and `elasticsearch` services automatically, so it's the recommended way to run the API.
 
 **Backend API — local (without Docker)**
 
@@ -241,7 +222,9 @@ Weekly sync: every Thursday mentor meeting, each member demos their slice agains
 | 1 | Wed 08 – Thu 09 Jul | Scope lock, architecture, repo, GCP provisioning, sample sourcing |
 | 2 | Fri 10 – Thu 16 Jul | Static analysis engine, ingestion/isolation, GCP+CAPE install, orchestrator skeleton |
 | 3 | Fri 17 – Thu 23 Jul | Dynamic sandbox live (Android + Windows), network capture, orchestrator wired to real data |
-| 4 | Fri 24 – Thu 30 Jul | MITRE/capability/narrative agents finalized, dashboard (Process Tree, Risk Score, Evidence Timeline), PPT + demo video, final submission on Unstop |
+| 4 | Fri 24 – Thu 30 Jul | MITRE/capability/narrative agents finalized, dashboard (Process Tree, Risk Score, Evidence Timeline) |
+| 5 | Fri 31 Jul – Thu 06 Aug | Integration testing, chain-of-custody hardening, encrypted-traffic metadata analysis (JA3), Geo-IP mapping |
+| 6 | Fri 07 – Sat 15 Aug | Bug fixes, performance optimization, final polish, PPT + demo video, final submission on Unstop |
 
 Full plan with daily/task-level detail: see `docs/` and the project plan PDF.
 
@@ -281,50 +264,3 @@ git push -u origin feature/<short-description>
 Made with 🛡️ by **Team HackersAPK**
 
 </div>
-
-
-### MalwareBazaar Threat Intelligence Integration
-
-Integrate the MalwareBazaar API to enrich SentinelScan analysis with
-external malware intelligence. The SHA-256 hash generated during static
-analysis will be queried against MalwareBazaar to determine whether the
-sample is already known and retrieve available threat-intelligence
-metadata.
-
-Planned capabilities:
-
-- SHA-256 hash-based malware lookup
-- Malware family identification
-- Known malware sample status
-- First-seen / submission information where available
-- Associated tags and threat classifications
-- Sample metadata and references
-- Correlation with locally generated IOCs
-- Enrichment of the final investigation report
-- Clear distinction between locally generated findings and external
-threat-intelligence findingg
-
-### Automated C2 Infrastructure & Network Fingerprinting
-
-Integrate Nmap-based network intelligence to automatically enrich
-suspected Command-and-Control (C2) indicators identified during static
-and dynamic malware analysis.
-
-When a suspected C2 IP address is identified, SentinelScan will be able
-to perform an authorized network scan in the controlled analysis
-environment and correlate the results with the malware investigation.
-
-Planned capabilities:
-
-- Automatically extract suspected C2 IPs from static and dynamic analysis
-- Validate and normalize discovered IP indicators
-- Perform authorized Nmap service discovery
-- Identify reachable TCP/UDP services
-- Detect service names and versions where available
-- Perform OS/device fingerprinting where supported
-- Resolve hostnames where available
-- Collect network exposure information
-- Correlate discovered ports/services with malware behavior
-- Store network intelligence with the investigation case
-- Display C2 infrastructure information in the investigator dashboard
-- Include network findings in the final investigation report
