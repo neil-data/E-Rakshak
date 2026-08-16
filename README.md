@@ -281,3 +281,41 @@ git push -u origin feature/<short-description>
 Made with 🛡️ by **Team HackersAPK**
 
 </div>
+
+
+### MalwareBazaar Threat Intelligence Integration
+
+Integrate the MalwareBazaar API to enrich SentinelScan analysis with
+external malware intelligence. The SHA-256 hash generated during static
+analysis will be queried against MalwareBazaar to determine whether the
+sample is already known and retrieve available threat-intelligence
+metadata.
+
+Planned capabilities:
+
+- SHA-256 hash-based malware lookup
+- Malware family identification
+- Known malware sample status
+- First-seen / submission information where available
+- Associated tags and threat classifications
+- Sample metadata and references
+- Correlation with locally generated IOCs
+- Enrichment of the final investigation report
+- Clear distinction between locally generated findings and external
+threat-intelligence findings
+
+Planned workflow:
+
+Sample
+   ↓
+SHA-256 Hash
+   ↓
+Local Static Analysis
+   ↓
+MalwareBazaar Threat Intelligence Lookup
+   ↓
+Correlate External + Local Findings
+   ↓
+Enhanced Risk Assessment
+   ↓
+Investigator Report
