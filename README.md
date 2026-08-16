@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/GJ Police.png" alt="SentinelScan Logo" width="120" />
+<img src="assets/logo.jpeg" alt="SentinelScan Logo" width="120" />
 
 # 🛡️ SentinelScan
 
@@ -167,8 +167,23 @@ docker-compose up -d      # Postgres + Redis + Elasticsearch
 
 **Backend API — Docker (via docker-compose)**
 
+Your `.env` must set `JWT_SECRET_KEY`. Generate one first:
+
 ```bash
-# .env must set JWT_SECRET_KEY (generate: python -c "import secrets; print(secrets.token_urlsafe(48))")
+# macOS / Linux / Git Bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+```powershell
+# Windows PowerShell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+> Run the **whole line above as one command** — don't copy just the part after `-c`. If PowerShell still errors, confirm Python is installed and on PATH with `python --version`.
+
+Paste the output into `.env` as `JWT_SECRET_KEY=<generated value>`, then:
+
+```bash
 docker-compose up -d --build backend
 ```
 
