@@ -135,7 +135,7 @@ Two design errors were caught by tests written to catch exactly them:
 
 A 12MB APK with an 8MB native library:
 
-| | Before | After |
+|Metric| Before | After |
 |---|---|---|
 | Wall time | ~88s | **7.4s** |
 | Peak memory | 110MB | **35MB** |
