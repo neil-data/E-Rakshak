@@ -2,7 +2,7 @@
 
 ## Overview
 
-The static engine already parsed four formats (APK, PE, ELF, Mach-O), hashed,
+The static engine already parsed four formats (APK, PE, ELF, Mac-O), hashed,
 extracted strings and ran a heuristic rule engine. Six of the twelve modules
 the phase called for were missing, and one silent defect made the Android path
 non-functional on real samples.
